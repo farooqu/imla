@@ -53,6 +53,8 @@ public struct ImlaConfig: Codable, Equatable {
     public var cleanupEngine = CleanupEngine.builtIn
     public var hotkey = Hotkey.default
     public var playSounds = true
+    /// Show the words as they're recognized in the pill, instead of the waveform.
+    public var liveTranscript = false
     public var vocabulary: [VocabularyEntry] = []
 
     public init() {}
@@ -67,6 +69,7 @@ public struct ImlaConfig: Codable, Equatable {
         cleanupEngine = (try? c.decodeIfPresent(CleanupEngine.self, forKey: .cleanupEngine)) ?? d.cleanupEngine
         hotkey = try c.decodeIfPresent(Hotkey.self, forKey: .hotkey) ?? d.hotkey
         playSounds = try c.decodeIfPresent(Bool.self, forKey: .playSounds) ?? d.playSounds
+        liveTranscript = try c.decodeIfPresent(Bool.self, forKey: .liveTranscript) ?? d.liveTranscript
         vocabulary = try c.decodeIfPresent([VocabularyEntry].self, forKey: .vocabulary) ?? d.vocabulary
     }
 

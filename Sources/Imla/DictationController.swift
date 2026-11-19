@@ -33,6 +33,8 @@ final class DictationController: ObservableObject {
     @Published private(set) var phase: Phase = .idle
     /// Microphone loudness from 0 to 1, about ten times a second.
     @Published private(set) var level: Float = 0
+    /// The transcript so far, for the pill's live preview.
+    @Published private(set) var preview = ""
     /// Saved to disk so a dictation that couldn't be pasted survives a restart.
     @Published private(set) var history: [HistoryItem]
     /// Where the caret was when dictation started, in screen points with a top-left origin.
@@ -193,9 +195,13 @@ final class DictationController: ObservableObject {
             return fail(modelState == .loading ? "The speech model is still loading" : "Set up the speech model in Imla Settings")
         }
         level = 0
+        preview = ""
         startedAt = Date()
         do {
             let stream = try engine.startStream(phrases: config.boostTerms)
+            if config.liveTranscript { stream.onPartial = { [weak self] text in
+                DispatchQueue.main.async { if self?.phase == .listening { self?.preview = text } }
+            } }
             self.stream = stream
             try recorder.start { [weak self] samples, level in
                 // Decoding runs on the engine's queue; only the level goes to the main thread.

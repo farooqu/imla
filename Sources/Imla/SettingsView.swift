@@ -41,6 +41,7 @@ private struct GeneralTab: View {
                 Text("Tap to start and tap again to finish, or hold while you talk. Esc cancels.")
                     .font(.caption).foregroundStyle(.secondary)
                 Toggle("Play sounds", isOn: $controller.config.playSounds)
+                Toggle("Show live transcript instead of the waveform", isOn: $controller.config.liveTranscript)
             }
             Section("Speech recognition") {
                 LabeledContent("Nemotron Speech Streaming English 0.6B") {

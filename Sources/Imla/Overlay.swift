@@ -14,12 +14,14 @@ final class OverlayModel: ObservableObject {
     // Per-frame animation state, deliberately not published.
     var smoothedLevel = 0.0
     var lastFrame: TimeInterval?
+    var ticker = Ticker()
 
     func show(_ next: Phase, fresh: Bool) {
         previous = fresh ? next : phase
-        phase = next
+        // Animated, so the pill resizes smoothly when the live transcript hands back to the bars.
+        withAnimation(.easeInOut(duration: 0.3)) { phase = next }
         changedAt = Date()
-        if fresh { smoothedLevel = 0 }
+        if fresh { smoothedLevel = 0; ticker = Ticker() }
     }
 }
 
@@ -108,9 +110,16 @@ struct OverlayView: View {
         }
     }
 
+    static let previewWidth: CGFloat = 240
+
+    /// With the live transcript on, it replaces the bars while you speak; the bars come back to show processing.
+    private var live: Bool { controller.config.liveTranscript && model.phase == .listening }
+
     var body: some View {
         HStack(spacing: 10) {
-            Bars(controller: controller, model: model).frame(width: Bars.width, height: Bars.height)
+            if !live {
+                Bars(controller: controller, model: model).frame(width: Bars.width, height: Bars.height)
+            }
             if let message {
                 // As wide as a short message needs; long ones wrap onto a second line.
                 ViewThatFits(in: .horizontal) {
@@ -119,6 +128,14 @@ struct OverlayView: View {
                 }
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(.secondary)
+            } else if live {
+                LiveTranscript(text: controller.preview, model: model)
+                    .frame(width: Self.previewWidth, height: Bars.height)
+                    .mask(LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black, location: 0.25),
+                                                 .init(color: .black, location: 0.94), .init(color: .clear, location: 1)],
+                                         startPoint: .leading, endPoint: .trailing))
+                    // Gone before the pill finishes shrinking back around the bars.
+                    .transition(.opacity.animation(.easeOut(duration: 0.12)))
             }
         }
         .padding(.horizontal, 14)
@@ -132,6 +149,106 @@ struct OverlayView: View {
         .animation(.easeInOut(duration: 0.2), value: message)
         // Centred in a window larger than the pill, so the shadow is never clipped.
         .frame(width: OverlayWindow.size.width, height: OverlayWindow.size.height)
+    }
+}
+
+/// The transcript as a ticker moving left at a constant speed. Each word joins at
+/// the right edge as it's recognized, and dots fill the line wherever you pause.
+private struct LiveTranscript: View {
+    let text: String
+    let model: OverlayModel
+
+    var body: some View {
+        TimelineView(.animation) { timeline in
+            Canvas { context, size in
+                let t = timeline.date.timeIntervalSinceReferenceDate
+                let dt = min(0.05, t - (model.lastFrame ?? t))
+                model.lastFrame = t
+                model.ticker.advance(dt, text: text, width: size.width, in: context)
+                model.ticker.draw(in: &context, size: size)
+            }
+        }
+    }
+}
+
+/// Ticker layout in line coordinates: the visible window is `scroll ..< scroll + width`.
+/// Words keep the place they were given, so only the window moves.
+struct Ticker {
+    static let speed = 90.0  // points per second
+    static let dotSpacing = 9.0
+    private static let wordGap = 4.0
+
+    private struct Word {
+        var text: Substring
+        var x: Double
+        var width: Double
+        var resolved: GraphicsContext.ResolvedText
+    }
+
+    private var words: [Word] = []
+    private var lastText = ""
+    private var scroll = 0.0
+    private var boost = 1.0
+    private var viewWidth = 0.0
+
+    private var end: Double { words.last.map { $0.x + $0.width } ?? 0 }
+
+    mutating func advance(_ dt: Double, text: String, width: Double, in context: GraphicsContext) {
+        viewWidth = width
+        if text != lastText { place(text, in: context) }
+        // Faster only while recognized words wait beyond the right edge, and gently.
+        let waiting = end - (scroll + width)
+        boost += ((waiting > width * 0.25 ? 1.5 : 1.0) - boost) * (1 - exp(-1.5 * dt))
+        scroll += Self.speed * boost * dt
+    }
+
+    /// New words enter at the right edge, or right after the previous word if it's still
+    /// arriving. A revised word keeps its place; any it now overlaps move right.
+    private mutating func place(_ text: String, in context: GraphicsContext) {
+        lastText = text
+        let next = text.split(whereSeparator: \.isWhitespace)
+        if words.count > next.count { words.removeLast(words.count - next.count) }
+        for (i, piece) in next.enumerated() {
+            let after = i == 0 ? -Double.infinity : words[i - 1].x + words[i - 1].width + Self.wordGap
+            if i < words.count {
+                if words[i].text != piece {
+                    let resolved = Self.resolve(piece, in: context)
+                    words[i].text = piece
+                    words[i].resolved = resolved
+                    words[i].width = resolved.measure(in: CGSize(width: CGFloat.infinity, height: .infinity)).width
+                }
+                words[i].x = max(words[i].x, after)
+            } else {
+                let resolved = Self.resolve(piece, in: context)
+                let width = resolved.measure(in: CGSize(width: CGFloat.infinity, height: .infinity)).width
+                words.append(Word(text: piece, x: max(after, scroll + viewWidth), width: width, resolved: resolved))
+            }
+        }
+    }
+
+    private static func resolve(_ word: Substring, in context: GraphicsContext) -> GraphicsContext.ResolvedText {
+        context.resolve(Text(String(word)).font(.system(size: 12, weight: .medium)).foregroundStyle(phaseColor(.listening)))
+    }
+
+    func draw(in context: inout GraphicsContext, size: CGSize) {
+        let lo = scroll, hi = scroll + size.width, mid = size.height / 2
+        // Words in view, newest first, and the spans they cover.
+        var covered: [ClosedRange<Double>] = []
+        for word in words.reversed() {
+            if word.x > hi { continue }
+            if word.x + word.width < lo { break }
+            context.draw(word.resolved, at: CGPoint(x: word.x - lo, y: mid), anchor: .leading)
+            covered.append((word.x - Self.wordGap)...(word.x + word.width + Self.wordGap))
+        }
+        // Dots on a fixed grid, so they travel with the line, everywhere words aren't.
+        let dotColor = phaseColor(.listening).opacity(0.35)
+        var x = (lo / Self.dotSpacing).rounded(.down) * Self.dotSpacing
+        while x <= hi {
+            if !covered.contains(where: { $0.contains(x) }) {
+                context.fill(Path(ellipseIn: CGRect(x: x - lo - 1.25, y: mid - 1.25, width: 2.5, height: 2.5)), with: .color(dotColor))
+            }
+            x += Self.dotSpacing
+        }
     }
 }
 
@@ -162,8 +279,8 @@ private struct Bars: View {
 
                 let elapsed = timeline.date.timeIntervalSince(model.changedAt)
                 let mix = smoothstep(min(1, elapsed / 0.35))
-                let from = Self.color(model.previous).resolve(in: context.environment)
-                let to = Self.color(model.phase).resolve(in: context.environment)
+                let from = phaseColor(model.previous).resolve(in: context.environment)
+                let to = phaseColor(model.phase).resolve(in: context.environment)
                 let color = Color(Color.Resolved(red: lerp(from.red, to.red, mix), green: lerp(from.green, to.green, mix),
                                                  blue: lerp(from.blue, to.blue, mix), opacity: lerp(from.opacity, to.opacity, mix)))
                 for i in 0..<Self.count {
@@ -195,16 +312,18 @@ private struct Bars: View {
         }
     }
 
-    private static func color(_ phase: Phase) -> Color {
-        switch phase {
-        // Neutral, so red stays free for errors and green for done.
-        case .listening: Color.primary.opacity(0.7)
-        case .transcribing: Color(nsColor: .systemBlue).opacity(0.85)
-        case .polishing: Color(nsColor: .systemPurple).opacity(0.85)
-        case .done: Color(nsColor: .systemGreen).opacity(0.9)
-        case .failed: Color(nsColor: .systemOrange).opacity(0.9)
-        case .idle: Color.secondary
-        }
+}
+
+/// What each phase looks like, for the bars and the live transcript.
+private func phaseColor(_ phase: Phase) -> Color {
+    switch phase {
+    // Neutral, so red stays free for errors and green for done.
+    case .listening: Color.primary.opacity(0.7)
+    case .transcribing: Color(nsColor: .systemBlue).opacity(0.85)
+    case .polishing: Color(nsColor: .systemPurple).opacity(0.85)
+    case .done: Color(nsColor: .systemGreen).opacity(0.9)
+    case .failed: Color(nsColor: .systemOrange).opacity(0.9)
+    case .idle: Color.secondary
     }
 }
 
