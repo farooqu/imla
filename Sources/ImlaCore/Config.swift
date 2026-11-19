@@ -48,7 +48,8 @@ public enum CleanupEngine: String, Codable, CaseIterable {
 
 public struct ImlaConfig: Codable, Equatable {
     public var ollamaURL = "http://localhost:11434"
-    public var ollamaModel = "gemma4:26b-mlx"
+    /// Empty until you choose one of your Ollama models.
+    public var ollamaModel = ""
     public var llmCleanup = true
     public var cleanupEngine = CleanupEngine.builtIn
     public var hotkey = Hotkey.default

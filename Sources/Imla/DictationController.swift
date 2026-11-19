@@ -304,8 +304,11 @@ final class DictationController: ObservableObject {
         return CleanupPrompt.accept(output, input: text)
     }
 
+    /// None until a model is chosen.
     private var ollama: OllamaClient? {
-        URL(string: config.ollamaURL).map { OllamaClient(baseURL: $0, model: config.ollamaModel) }
+        let model = config.ollamaModel.trimmingCharacters(in: .whitespaces)
+        guard !model.isEmpty else { return nil }
+        return URL(string: config.ollamaURL).map { OllamaClient(baseURL: $0, model: model) }
     }
 
     /// Nothing was heard: let the pill go without a message.

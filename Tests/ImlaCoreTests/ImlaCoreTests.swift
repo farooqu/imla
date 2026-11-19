@@ -31,6 +31,14 @@ import Testing
     #expect(config.boostTerms == ["Jira", "MR"])
 }
 
+@Test func freshConfigHasNoPersonalDefaults() throws {
+    // A new install, and a file written by one, start with no terms and no Ollama model.
+    let config = try JSONDecoder().decode(ImlaConfig.self, from: Data("{}".utf8))
+    #expect(config.vocabulary.isEmpty)
+    #expect(config.ollamaModel.isEmpty)
+    #expect(ImlaConfig().vocabulary.isEmpty && ImlaConfig().ollamaModel.isEmpty)
+}
+
 @Test func s1MiniPromptIsTheTrainedFormat() {
     // The model card says any other wording, or a missing empty think block, garbles its output.
     #expect(S1MiniEngine.prompt(for: "ship it friday") == """

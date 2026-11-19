@@ -70,7 +70,7 @@ private struct GeneralTab: View {
                         .font(.caption).foregroundStyle(.secondary)
                 case .ollama:
                     TextField("Ollama URL", text: $controller.config.ollamaURL)
-                    TextField("Model", text: $controller.config.ollamaModel)
+                    TextField("Model", text: $controller.config.ollamaModel, prompt: Text("such as gemma3:4b"))
                     StatusRow(label: "Check model", status: llmStatus) { llmStatus = await checkLLM() }
                 }
             }
@@ -101,7 +101,10 @@ private struct GeneralTab: View {
               let (data, _) = try? await URLSession.shared.data(from: base.appendingPathComponent("api/tags")),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return "❌ Unreachable" }
         let names = (json["models"] as? [[String: Any]] ?? []).compactMap { $0["name"] as? String }
-        return names.contains(c.ollamaModel) ? "✅ \(c.ollamaModel) available" : "⚠️ Model not found. Have: \(names.joined(separator: ", "))"
+        let model = c.ollamaModel.trimmingCharacters(in: .whitespaces)
+        let have = names.isEmpty ? "none" : names.joined(separator: ", ")
+        if model.isEmpty { return "⚠️ Enter a model name. Have: \(have)" }
+        return names.contains(model) ? "✅ \(model) available" : "⚠️ Model not found. Have: \(have)"
     }
 }
 
