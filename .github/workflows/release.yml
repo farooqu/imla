@@ -87,14 +87,14 @@ jobs:
       - name: Disk image
         run: |
           # For first installs: Imla next to an Applications shortcut to drag it onto.
-          # Updates use the zip.
+          # Updates use the zip. Left unsigned: Gatekeeper checks a signed disk image when
+          # it's opened and blocks one that isn't notarized, which would add a second
+          # warning before the one for the app.
           STAGE="$RUNNER_TEMP/dmg"
           mkdir -p "$STAGE" dist
           ditto build/Imla.app "$STAGE/Imla.app"
           ln -s /Applications "$STAGE/Applications"
           hdiutil create -volname Imla -srcfolder "$STAGE" -fs HFS+ -format UDZO -ov dist/Imla.dmg
-          codesign --sign "Imla Release" --timestamp=none dist/Imla.dmg
-          codesign --verify dist/Imla.dmg
 
       - name: Package and sign update
         env:
