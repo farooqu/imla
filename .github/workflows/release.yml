@@ -109,6 +109,8 @@ jobs:
           SIGNATURE="$(.build/artifacts/sparkle/Sparkle/bin/sign_update --ed-key-file "$KEY_FILE" dist/Imla.zip)"
           rm "$KEY_FILE"
           BASE="https://github.com/${GITHUB_REPOSITORY}/releases"
+          # Shown in Sparkle's update window, instead of loading the GitHub release page.
+          NOTES_HTML="$(python3 scripts/notes-html.py "$RUNNER_TEMP/notes.md")"
           cat > dist/appcast.xml <<EOF
           <?xml version="1.0" encoding="utf-8"?>
           <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
@@ -120,7 +122,8 @@ jobs:
                 <sparkle:version>$BUILD</sparkle:version>
                 <sparkle:shortVersionString>$VERSION</sparkle:shortVersionString>
                 <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
-                <sparkle:releaseNotesLink>$BASE/tag/v$VERSION</sparkle:releaseNotesLink>
+                <description><![CDATA[$NOTES_HTML]]></description>
+                <sparkle:fullReleaseNotesLink>$BASE</sparkle:fullReleaseNotesLink>
                 <enclosure url="$BASE/download/v$VERSION/Imla.zip" type="application/octet-stream" $SIGNATURE/>
               </item>
             </channel>
