@@ -1,5 +1,5 @@
 # Each vX.Y.Z tag becomes a GitHub release: this builds, signs, and publishes
-# Imla.zip and the Sparkle appcast.xml, with the tag's message as the notes.
+# Imla.dmg, plus Imla.zip and the Sparkle appcast.xml for updates, with the tag's message as the notes.
 # scripts/release.sh creates the tags.
 name: Release
 
@@ -84,6 +84,18 @@ jobs:
           IMLA_INSTALL_DIR: none
         run: ./scripts/build-app.sh
 
+      - name: Disk image
+        run: |
+          # For first installs: Imla next to an Applications shortcut to drag it onto.
+          # Updates use the zip.
+          STAGE="$RUNNER_TEMP/dmg"
+          mkdir -p "$STAGE" dist
+          ditto build/Imla.app "$STAGE/Imla.app"
+          ln -s /Applications "$STAGE/Applications"
+          hdiutil create -volname Imla -srcfolder "$STAGE" -fs HFS+ -format UDZO -ov dist/Imla.dmg
+          codesign --sign "Imla Release" --timestamp=none dist/Imla.dmg
+          codesign --verify dist/Imla.dmg
+
       - name: Package and sign update
         env:
           SPARKLE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
@@ -121,7 +133,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.version.outputs.version }}
         run: |
-          gh release create "v$VERSION" dist/Imla.zip dist/appcast.xml \
+          gh release create "v$VERSION" dist/Imla.dmg dist/Imla.zip dist/appcast.xml \
             --verify-tag --title "Imla $VERSION" --notes-file "$RUNNER_TEMP/notes.md"
 
       - name: Remove signing keychain
