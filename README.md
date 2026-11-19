@@ -111,4 +111,6 @@ Releases are signed twice, without an Apple Developer account:
 | `IMLA_SIGNING_P12_BASE64` | The certificate and its private key, as a base64 PKCS#12 |
 | `IMLA_SIGNING_P12_PASSWORD` | The PKCS#12 password |
 | `SPARKLE_ED_PRIVATE_KEY` | The Sparkle private key, base64 |
-| `FORGEJO_TOKEN` | A token that can push tags to the upstream repository this one mirrors |
+| `UPSTREAM_PUSH_TOKEN` | Only if this repository is a push mirror: a token that can push tags to the repository it mirrors |
+
+If the GitHub repository is a push mirror of another, set the repository variable `UPSTREAM_REPO` to that repository's HTTPS clone URL. A mirror deletes refs that exist only on GitHub, so the workflow pushes each release tag there first.

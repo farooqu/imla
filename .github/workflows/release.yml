@@ -44,12 +44,16 @@ jobs:
           P12: ${{ secrets.IMLA_SIGNING_P12_BASE64 }}
           P12_PASSWORD: ${{ secrets.IMLA_SIGNING_P12_PASSWORD }}
           SPARKLE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
-          FORGEJO_TOKEN: ${{ secrets.FORGEJO_TOKEN }}
+          UPSTREAM_REPO: ${{ vars.UPSTREAM_REPO }}
+          UPSTREAM_PUSH_TOKEN: ${{ secrets.UPSTREAM_PUSH_TOKEN }}
         run: |
           missing=0
-          for name in P12 P12_PASSWORD SPARKLE_KEY FORGEJO_TOKEN; do
+          for name in P12 P12_PASSWORD SPARKLE_KEY; do
             [ -n "${!name}" ] || { echo "::error::Secret for $name is not set"; missing=1; }
           done
+          if [ -n "$UPSTREAM_REPO" ] && [ -z "$UPSTREAM_PUSH_TOKEN" ]; then
+            echo "::error::UPSTREAM_REPO is set but the UPSTREAM_PUSH_TOKEN secret is not"; missing=1
+          fi
           exit $missing
 
       - name: Cache runtime
@@ -126,16 +130,20 @@ jobs:
           EOF
           cat dist/appcast.xml
 
-      # The GitHub repository mirrors a Forgejo repository, and the mirror deletes refs
-      # that only exist on GitHub, so the tag goes to Forgejo first.
+      # When this repository is a push mirror of another (the UPSTREAM_REPO variable, an
+      # HTTPS clone URL), the mirror deletes refs that exist only here, so the tag goes
+      # upstream first and comes back with the next sync.
       - name: Tag
         if: steps.version.outputs.version != ''
         env:
-          FORGEJO_TOKEN: ${{ secrets.FORGEJO_TOKEN }}
+          UPSTREAM_REPO: ${{ vars.UPSTREAM_REPO }}
+          UPSTREAM_PUSH_TOKEN: ${{ secrets.UPSTREAM_PUSH_TOKEN }}
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           git tag "v$VERSION" "$GITHUB_SHA"
-          git push "https://oauth2:${FORGEJO_TOKEN}@code.thefarooqs.net/umer/imla.git" "v$VERSION"
+          if [ -n "$UPSTREAM_REPO" ]; then
+            git push "https://oauth2:${UPSTREAM_PUSH_TOKEN}@${UPSTREAM_REPO#https://}" "v$VERSION"
+          fi
 
       - name: Publish release
         if: steps.version.outputs.version != ''
