@@ -1,0 +1,41 @@
+# Tags each push to main that changes the app with the next version, the same way
+# scripts/release.sh does: scripts/next-release.py picks the version and notes from
+# the Conventional Commits since the last tag. The push mirror carries the tag to
+# GitHub, where .github/workflows/release.yml builds and publishes the release.
+name: Tag release
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  tag:
+    runs-on: default
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Tag the next version
+        run: |
+          command -v python3 >/dev/null || { apt-get update -qq && apt-get install -y -qq python3 >/dev/null; }
+          NOTES="$(mktemp)"
+          git fetch --quiet --tags origin
+          VERSION="$(python3 scripts/next-release.py "$NOTES")"
+          if [ -z "$VERSION" ]; then
+            echo "Nothing new to release."
+            exit 0
+          fi
+          # Only the newest commit on main is released; an older run that lost a race stops here.
+          git fetch --quiet origin main
+          if [ "$(git rev-parse FETCH_HEAD)" != "$(git rev-parse HEAD)" ]; then
+            echo "main has moved on; its own run tags it."
+            exit 0
+          fi
+          git config user.name "Imla release"
+          git config user.email "release@imla.invalid"
+          # Verbatim, so the notes' "## " headings aren't stripped as comments.
+          git tag --annotate --cleanup=verbatim --file "$NOTES" "v$VERSION"
+          git push origin "v$VERSION"
+          echo "Tagged v$VERSION:"
+          cat "$NOTES"

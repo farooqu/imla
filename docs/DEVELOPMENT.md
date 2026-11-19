@@ -16,9 +16,11 @@ uv run --with pillow scripts/make-icon.py   # rebuilds Resources/AppIcon.icns fr
 
 ## Releases
 
-To release, run `./scripts/release.sh` on an up-to-date `main`. It picks the version from the [Conventional Commits](https://www.conventionalcommits.org) since the last `v*` tag: `feat:` bumps the minor version, `fix:` and anything else the patch, and `feat!:` or a `BREAKING CHANGE:` footer the major (the minor while the version is 0.x). Only commits that change what ships in the app count (`Sources`, `Resources`, the package manifest, and the build scripts), so documentation and other housekeeping never cut a release on their own. It shows the version and the release notes it wrote from the commit subjects, and after you confirm, tags `main` with the notes as the tag message and pushes both.
+Every push to `main` that changes the app is released. `.forgejo/workflows/tag.yml` runs on the upstream Forgejo repository, picks the version from the [Conventional Commits](https://www.conventionalcommits.org) since the last `v*` tag, and tags `main` with release notes written from the commit subjects as the tag message. `feat:` bumps the minor version, `fix:` and anything else the patch, and `feat!:` or a `BREAKING CHANGE:` footer the major (the minor while the version is 0.x). Only commits that change what ships in the app count (`Sources`, `Resources`, the package manifest, and the build scripts), so pushes with only documentation or other housekeeping don't tag anything.
 
-The tag starts `.github/workflows/release.yml`, which builds and signs the app and publishes a GitHub release with `Imla.dmg` for new installs, and `Imla.zip` with a signed Sparkle `appcast.xml` for updates. Imla's updater reads the appcast from the latest release. Ordinary pushes don't release anything.
+`./scripts/release.sh` does the same from a local checkout, after showing the version and notes and asking to confirm, for a repository without the Forgejo workflow.
+
+The Forgejo push mirror carries the tag to GitHub. There it starts `.github/workflows/release.yml`, which runs the tests, builds and signs the app, and publishes a GitHub release with `Imla.dmg` for new installs, and `Imla.zip` with a signed Sparkle `appcast.xml` for updates. Imla's updater reads the appcast from the latest release. If the tests or build fail, the tag stays without a release, and the next change gets the following version.
 
 Releases are signed twice, without an Apple Developer account:
 
