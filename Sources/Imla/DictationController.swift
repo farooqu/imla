@@ -50,6 +50,12 @@ final class DictationController: ObservableObject {
     @Published private(set) var modelState: ModelState = .loading
     /// The built-in cleanup model, S1-mini.
     @Published private(set) var cleanupModelState: ModelState = .loading
+    /// The failure on the pill is that the models aren't set up; clicking it opens Settings.
+    @Published private(set) var failureOpensSettings = false
+    /// Opens the Settings window. The menu bar icon provides it, since it's always on screen.
+    var showSettingsWindow: (() -> Void)?
+    /// Models whose downloads overlap, so the progress covers all of them.
+    private var downloads: [(bytes: Int64, state: KeyPath<DictationController, ModelState>)] = []
     @Published var config: ImlaConfig {
         didSet {
             guard config != oldValue else { return }
@@ -79,13 +85,7 @@ final class DictationController: ObservableObject {
         config = ImlaConfig.load()
         if !FileManager.default.fileExists(atPath: ImlaConfig.fileURL.path) { try? config.save() }
         registerHotkey()
-        AVCaptureDevice.requestAccess(for: .audio) { _ in }
-        // Ask once. Without it dictations are copied instead, and Settings has a Grant button,
-        // so a stale grant doesn't bring the system prompt back on every launch.
-        if !Paster.canPaste, !UserDefaults.standard.bool(forKey: "askedForAccessibility") {
-            UserDefaults.standard.set(true, forKey: "askedForAccessibility")
-            Paster.requestAccessibility()
-        }
+        // Permissions are asked for in the welcome window, after it says what each is for.
         Task { await loadModel() }
         Task { await loadCleanupModel() }
     }
@@ -135,20 +135,54 @@ final class DictationController: ObservableObject {
     }
 
     func installModel() {
-        install(\.modelState, NemotronModel.install, then: loadModel)
+        install(\.modelState, NemotronModel.downloadBytes, NemotronModel.install, then: loadModel)
     }
 
     func installCleanupModel() {
-        install(\.cleanupModelState, S1MiniModel.install, then: loadCleanupModel)
+        install(\.cleanupModelState, S1MiniModel.downloadBytes, S1MiniModel.install, then: loadCleanupModel)
     }
 
-    private func install(_ state: ReferenceWritableKeyPath<DictationController, ModelState>,
+    /// The models dictation needs that aren't installed, with their download sizes.
+    var missingModels: [Int64] {
+        var sizes: [Int64] = []
+        if Self.needsInstall(modelState) { sizes.append(NemotronModel.downloadBytes) }
+        if config.usesBuiltInCleanup, Self.needsInstall(cleanupModelState) { sizes.append(S1MiniModel.downloadBytes) }
+        return sizes
+    }
+
+    /// Downloads every model in `missingModels`.
+    func installModels() {
+        if Self.needsInstall(modelState) { installModel() }
+        if config.usesBuiltInCleanup, Self.needsInstall(cleanupModelState) { installCleanupModel() }
+    }
+
+    /// From 0 to 1 across the downloads in progress, by size; nil when nothing is downloading.
+    var downloadProgress: Double? {
+        var done = 0.0, total = 0.0, active = false
+        for download in downloads {
+            switch self[keyPath: download.state] {
+            case .installing(let progress): done += progress * Double(download.bytes); active = true
+            case .loading, .ready: done += Double(download.bytes)
+            case .missing, .failed: continue
+            }
+            total += Double(download.bytes)
+        }
+        return active && total > 0 ? done / total : nil
+    }
+
+    private static func needsInstall(_ state: ModelState) -> Bool {
+        switch state {
+        case .missing, .failed: true
+        default: false
+        }
+    }
+
+    private func install(_ state: ReferenceWritableKeyPath<DictationController, ModelState>, _ bytes: Int64,
                          _ install: @escaping (@escaping @Sendable (Double) -> Void) async throws -> Void,
                          then load: @escaping () async -> Void) {
-        switch self[keyPath: state] {
-        case .missing, .failed: break
-        default: return
-        }
+        guard Self.needsInstall(self[keyPath: state]) else { return }
+        if downloadProgress == nil { downloads = [] }
+        downloads.append((bytes, state))
         self[keyPath: state] = .installing(progress: 0)
         Task {
             do {
@@ -206,7 +240,9 @@ final class DictationController: ObservableObject {
         }
         anchor = target?.anchor
         guard let engine else {
-            return fail(modelState == .loading ? "The speech model is still loading" : "Set up the speech model in Imla Settings")
+            if modelState == .loading { return fail("The speech model is still loading") }
+            return fail(downloadProgress != nil ? "Imla's models are still downloading" : "Click here to set up Imla's speech model",
+                        opensSettings: true)
         }
         level = 0
         preview = ""
@@ -283,7 +319,7 @@ final class DictationController: ObservableObject {
             } else if Paster.insert(text, into: target == nil ? targetApp : nil) {
                 notice = nil
             } else {
-                notice = "Copied. Allow Accessibility to paste automatically"
+                notice = "Copied. Allow \(Paster.permissionName) to paste automatically"
             }
             item.ready = Date().timeIntervalSince(stoppedAt)
             updateHistory(item)
@@ -332,11 +368,26 @@ final class DictationController: ObservableObject {
         phase = .idle
     }
 
-    private func fail(_ message: String) {
+    private func fail(_ message: String, opensSettings: Bool = false) {
         HotkeyCenter.shared.unregister(Self.cancelHotkey)
         if config.playSounds { NSSound(named: "Basso")?.play() }
+        failureOpensSettings = opensSettings
         phase = .failed(message)
-        scheduleHide(after: 4)
+        scheduleHide(after: opensSettings ? 6 : 4)
+    }
+
+    func openSettings(tab: Int = 0) {
+        settingsTab = tab
+        showSettingsWindow?()
+        NSApp.activate()
+    }
+
+    /// The pill was clicked while it said the models need setting up.
+    func failureClicked() {
+        guard failureOpensSettings, case .failed = phase else { return }
+        hideTask?.cancel()
+        phase = .idle
+        openSettings()
     }
 
     private func scheduleHide(after seconds: Double) {

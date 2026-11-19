@@ -58,6 +58,8 @@ final class OverlayWindow {
     }
 
     private func show(_ phase: Phase) {
+        // Clicks pass through the pill, except when clicking it opens Settings.
+        if case .failed = phase { panel.ignoresMouseEvents = !controller.failureOpensSettings } else { panel.ignoresMouseEvents = true }
         let fresh = !panel.isVisible || hiding
         model.show(phase, fresh: fresh)
         hiding = false
@@ -90,6 +92,7 @@ final class OverlayWindow {
     }
 
     private func hide() {
+        panel.ignoresMouseEvents = true
         guard panel.isVisible else { return }
         hiding = true
         NSAnimationContext.runAnimationGroup({ $0.duration = 0.3; panel.animator().alphaValue = 0 }) {
@@ -146,6 +149,8 @@ struct OverlayView: View {
                 .overlay(RoundedRectangle(cornerRadius: 19, style: .continuous).strokeBorder(.primary.opacity(0.08)))
                 .shadow(color: .black.opacity(0.12), radius: 8, y: 3)
         }
+        .contentShape(RoundedRectangle(cornerRadius: 19, style: .continuous))
+        .onTapGesture { controller.failureClicked() }
         .animation(.easeInOut(duration: 0.2), value: message)
         // Centred in a window larger than the pill, so the shadow is never clipped.
         .frame(width: OverlayWindow.size.width, height: OverlayWindow.size.height)

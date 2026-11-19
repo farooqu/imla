@@ -28,8 +28,10 @@
 
 1. Download `Imla.dmg` from the [latest release](https://github.com/farooqu/imla/releases/latest), open it, and drag Imla onto the Applications folder next to it.
 2. Open Imla. The first time, macOS refuses: it says Apple could not verify that Imla is free of malware, and offers to move it to the Trash. That's expected; see [First launch](#first-launch) below.
-3. Grant **Microphone** and **Accessibility** when asked. Accessibility is what lets Imla paste into other apps.
-4. Open **Settings** from the menu bar icon and download the speech and cleanup models (about 1.2 GB together).
+3. The welcome window walks you through setup, saying what each step is for before macOS asks:
+   - **Microphone**, to hear you while you dictate.
+   - **Device Control and Data Access** (called **Accessibility** on macOS 26), in System Settings → Privacy & Security. It lets Imla find the field your cursor is in and paste there. macOS describes everything this permission could allow; Imla uses it only to paste.
+   - **Models**: download the speech and cleanup models (about 1.2 GB together).
 
 Imla checks for updates daily and installs them in the background; **Check for Updates…** in the menu checks now.
 
@@ -62,7 +64,7 @@ Imla remembers the field your cursor was in when you started, and pastes the tex
 If Imla can't paste, the text is never lost or typed into the wrong place:
 
 - **It can't get back to that field**, for example because you closed the window: the text is on the clipboard, ready for ⌘V, and the pill says so.
-- **Accessibility isn't allowed:** Imla can't paste into other apps, so every dictation goes to the clipboard instead.
+- **Device Control and Data Access (Accessibility) isn't allowed:** Imla can't paste into other apps, so every dictation goes to the clipboard instead.
 - **Either way,** the last 20 dictations are in **Recent Dictations** in the menu and in **Settings → History**, which also shows what was heard and how quickly the text was ready.
 
 ## Vocabulary

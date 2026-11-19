@@ -97,6 +97,14 @@ extension Hotkey {
 enum Paster {
     static var canPaste: Bool { AXIsProcessTrusted() }
 
+    /// What System Settings calls the Accessibility permission: macOS 27 renamed it.
+    static let permissionName = ProcessInfo.processInfo.isOperatingSystemAtLeast(.init(majorVersion: 27, minorVersion: 0, patchVersion: 0))
+        ? "Device Control and Data Access" : "Accessibility"
+
+    static func openPermissionSettings() {
+        NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!)
+    }
+
     static func requestAccessibility() {
         let key = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
         _ = AXIsProcessTrustedWithOptions([key: true] as CFDictionary)

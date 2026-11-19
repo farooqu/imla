@@ -1,4 +1,5 @@
 import AppKit
+import ImlaCore
 import Sparkle
 import SwiftUI
 
@@ -16,6 +17,13 @@ struct ImlaApp: App {
             SettingsView(controller: delegate.controller)
         }
         .windowResizability(.contentSize)
+        .defaultLaunchBehavior(.suppressed)
+        // A first launch explains each permission before asking, then downloads the models.
+        Window("Welcome to Imla", id: "welcome") {
+            WelcomeView(controller: delegate.controller)
+        }
+        .windowResizability(.contentSize)
+        .defaultLaunchBehavior(WelcomeView.isNeeded ? .presented : .suppressed)
     }
 }
 
@@ -41,18 +49,54 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
 private struct MenuIcon: View {
     @ObservedObject var controller: DictationController
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        Image(systemName: controller.phase == .listening ? "waveform.circle.fill" : "waveform")
+        Group {
+            if let progress = controller.downloadProgress {
+                Image(nsImage: Self.ring(progress))
+            } else {
+                Image(systemName: controller.phase == .listening ? "waveform.circle.fill" : "waveform")
+            }
+        }
+        .onAppear { controller.showSettingsWindow = { openWindow(id: "settings") } }
+    }
+
+    /// A download progress ring, drawn as a template image so it matches the menu bar.
+    private static func ring(_ progress: Double) -> NSImage {
+        let image = NSImage(size: NSSize(width: 16, height: 16), flipped: false) { rect in
+            let inset = rect.insetBy(dx: 2, dy: 2), center = NSPoint(x: rect.midX, y: rect.midY)
+            NSColor.black.withAlphaComponent(0.3).setStroke()
+            let track = NSBezierPath(ovalIn: inset)
+            track.lineWidth = 2
+            track.stroke()
+            NSColor.black.setStroke()
+            let arc = NSBezierPath()
+            arc.appendArc(withCenter: center, radius: inset.width / 2, startAngle: 90, endAngle: 90 - 360 * max(0.02, progress), clockwise: true)
+            arc.lineWidth = 2
+            arc.lineCapStyle = .round
+            arc.stroke()
+            return true
+        }
+        image.isTemplate = true
+        return image
     }
 }
 
 private struct MenuContent: View {
     @ObservedObject var controller: DictationController
     let updater: SPUStandardUpdaterController?
-    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
+        if let progress = controller.downloadProgress {
+            Text("Downloading models… \(Int(progress * 100))%")
+            Divider()
+        } else if !controller.missingModels.isEmpty {
+            Button("Download Models (\(ByteCountFormatter.string(fromByteCount: controller.missingModels.reduce(0, +), countStyle: .file)))") {
+                controller.installModels()
+            }
+            Divider()
+        }
         Button(controller.phase == .listening ? "Stop Dictation" : "Start Dictation  (\(controller.config.hotkey.displayString))") {
             controller.toggle()
         }
@@ -66,21 +110,15 @@ private struct MenuContent: View {
                 Button(Self.title(item)) { controller.copy(item.final) }
             }
             Divider()
-            Button("Show History…") { openSettings(tab: 2) }
+            Button("Show History…") { controller.openSettings(tab: 2) }
         }
         Divider()
-        Button("Settings…") { openSettings(tab: 0) }
+        Button("Settings…") { controller.openSettings() }
         .keyboardShortcut(",")
         if let updater {
             Button("Check for Updates…") { updater.checkForUpdates(nil) }
         }
         Button("Quit Imla") { NSApp.terminate(nil) }.keyboardShortcut("q")
-    }
-
-    private func openSettings(tab: Int) {
-        controller.settingsTab = tab
-        openWindow(id: "settings")
-        NSApp.activate()
     }
 
     private static func title(_ item: HistoryItem) -> String {

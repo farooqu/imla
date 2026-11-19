@@ -23,6 +23,39 @@ struct SettingsView: View {
     }
 }
 
+/// Shown above Settings until the models are installed, so a first launch has one obvious step.
+private struct ModelSetupBanner: View {
+    @ObservedObject var controller: DictationController
+
+    var body: some View {
+        Group {
+            if let progress = controller.downloadProgress {
+                ProgressView(value: progress) {
+                    Text("Downloading Imla's models… \(Int(progress * 100))%")
+                } currentValueLabel: {
+                    Text("You can close this window; the download keeps going.").font(.caption)
+                }
+            } else if !controller.missingModels.isEmpty {
+                HStack(spacing: 12) {
+                    Image(systemName: "arrow.down.circle.fill").font(.title).foregroundStyle(.tint)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Download the models to start dictating").font(.headline)
+                        Text("Speech recognition and cleanup run on this Mac, so Imla needs them once.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Button("Download (\(ByteCountFormatter.string(fromByteCount: controller.missingModels.reduce(0, +), countStyle: .file)))") {
+                        controller.installModels()
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+            }
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, controller.downloadProgress == nil && controller.missingModels.isEmpty ? 0 : 14)
+    }
+}
+
 private struct GeneralTab: View {
     @ObservedObject var controller: DictationController
     @ViewState private var llmStatus: String?
@@ -30,6 +63,13 @@ private struct GeneralTab: View {
     @ViewState private var mic = AVCaptureDevice.authorizationStatus(for: .audio)
 
     var body: some View {
+        VStack(spacing: 0) {
+            ModelSetupBanner(controller: controller)
+            form
+        }
+    }
+
+    private var form: some View {
         Form {
             Section("Shortcut") {
                 LabeledContent("Start / stop dictation") {
@@ -80,10 +120,10 @@ private struct GeneralTab: View {
                         NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")!)
                     }
                 }
-                LabeledContent("Accessibility (to paste)") {
+                LabeledContent("\(Paster.permissionName) (to paste)") {
                     PermissionBadge(granted: trusted) {
                         Paster.requestAccessibility()
-                        NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!)
+                        Paster.openPermissionSettings()
                     }
                 }
             }

@@ -12,7 +12,7 @@ uv run --with pillow scripts/make-icon.py   # rebuilds Resources/AppIcon.icns fr
 
 `scripts/build-runtime.sh` builds a pinned NeMo-Speech.cpp ASR library and libllama from its llama.cpp submodule, so both share one ggml, into `.runtime/lib`; the app carries them in `Contents/Frameworks`. Without Xcode, the scripts use the Command Line Tools.
 
-`build-app.sh` signs with `$IMLA_SIGN_IDENTITY`, else an "Imla Release" or Apple Development certificate in your keychain, else ad hoc. Use a certificate: macOS forgets the Microphone and Accessibility grants of an ad hoc signed app every time it's rebuilt. Local builds never update themselves.
+`build-app.sh` signs with `$IMLA_SIGN_IDENTITY`, else an "Imla Release" or Apple Development certificate in your keychain, else ad hoc. Use a certificate: macOS forgets the Microphone and Device Control (Accessibility) grants of an ad hoc signed app every time it's rebuilt. Local builds never update themselves.
 
 ## Releases
 
