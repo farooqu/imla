@@ -2,13 +2,15 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>CFBundleIdentifier</key>
-	<string>io.github.farooqu.imla</string>
-	<key>CFBundleName</key>
-	<string>Imla</string>
 	<key>CFBundleDisplayName</key>
 	<string>Imla</string>
 	<key>CFBundleExecutable</key>
+	<string>Imla</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
+	<key>CFBundleIdentifier</key>
+	<string>io.github.farooqu.imla</string>
+	<key>CFBundleName</key>
 	<string>Imla</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
@@ -16,22 +18,19 @@
 	<string>0.0.0-dev</string>
 	<key>CFBundleVersion</key>
 	<string>0</string>
-	<key>CFBundleIconFile</key>
-	<string>AppIcon</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>26.0</string>
 	<key>LSUIElement</key>
 	<true/>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>Imla transcribes your voice on this Mac while you dictate.</string>
-	<!-- scripts/build-app.sh adds SUFeedURL for release builds only. -->
-	<key>SUPublicEDKey</key>
-	<string>unkRZicEuW3vWBNyVb0V4QoRZ6zktz8JFYz6yF6Cyuw=</string>
-	<key>SUEnableAutomaticChecks</key>
-	<true/>
-	<key>SUAutomaticallyUpdate</key>
-	<true/>
 	<key>NSHighResolutionCapable</key>
 	<true/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Imla transcribes your voice on this Mac while you dictate.</string>
+	<key>SUAutomaticallyUpdate</key>
+	<true/>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
+	<key>SUPublicEDKey</key>
+	<string>ruxs2JZBLBdOCQnm6mu2euzQX3ZE5toVZMpInjgNO1U=</string>
 </dict>
 </plist>
