@@ -33,6 +33,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             MainActor.assumeIsolated { self?.controller.registerHotkey() }
         }
     }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        controller.unloadModels()
+    }
 }
 
 private struct MenuIcon: View {

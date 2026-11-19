@@ -86,6 +86,14 @@ final class DictationController: ObservableObject {
 
     // MARK: Models
 
+    /// Frees both models. ggml's Metal device is torn down when the process exits,
+    /// and it aborts if a model's GPU buffers are still alive then.
+    func unloadModels() {
+        cancel()
+        engine = nil
+        cleaner = nil
+    }
+
     /// Loads the shared model if it's installed; otherwise Settings offers to download it.
     func loadModel() async {
         modelState = .loading
