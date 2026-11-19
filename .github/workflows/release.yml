@@ -1,12 +1,11 @@
-# Every push to main that has new commits since the last v* tag becomes a release:
-# scripts/next-release.py picks the semver bump and notes from Conventional Commits,
-# then this builds, signs, and publishes Imla.zip and the Sparkle appcast.xml.
+# Each vX.Y.Z tag becomes a GitHub release: this builds, signs, and publishes
+# Imla.zip and the Sparkle appcast.xml, with the tag's message as the notes.
+# scripts/release.sh creates the tags.
 name: Release
 
 on:
   push:
-    branches: [main]
-  workflow_dispatch:
+    tags: ["v[0-9]+.[0-9]+.[0-9]+"]
 
 concurrency:
   group: release
@@ -26,53 +25,42 @@ jobs:
 
       - uses: astral-sh/setup-uv@v6
 
-      - name: Next version
+      - name: Version
         id: version
         run: |
-          VERSION="$(python3 scripts/next-release.py "$RUNNER_TEMP/notes.md")"
-          if [ -z "$VERSION" ]; then
-            echo "Nothing new since the last release."
-          fi
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          # Fetched again: checking out a tag can leave it lightweight, without its message.
+          git fetch --force origin "refs/tags/$GITHUB_REF_NAME:refs/tags/$GITHUB_REF_NAME"
+          git for-each-ref --format='%(contents)' "refs/tags/$GITHUB_REF_NAME" > "$RUNNER_TEMP/notes.md"
+          echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
           echo "build=$(git rev-list --count HEAD)" >> "$GITHUB_OUTPUT"
           echo "DEVELOPER_DIR=$(xcode-select -p)" >> "$GITHUB_ENV"
           echo "KEYCHAIN=$RUNNER_TEMP/imla-signing.keychain-db" >> "$GITHUB_ENV"
 
       - name: Check secrets
-        if: steps.version.outputs.version != ''
         env:
           P12: ${{ secrets.IMLA_SIGNING_P12_BASE64 }}
           P12_PASSWORD: ${{ secrets.IMLA_SIGNING_P12_PASSWORD }}
           SPARKLE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
-          UPSTREAM_REPO: ${{ vars.UPSTREAM_REPO }}
-          UPSTREAM_PUSH_TOKEN: ${{ secrets.UPSTREAM_PUSH_TOKEN }}
         run: |
           missing=0
           for name in P12 P12_PASSWORD SPARKLE_KEY; do
             [ -n "${!name}" ] || { echo "::error::Secret for $name is not set"; missing=1; }
           done
-          if [ -n "$UPSTREAM_REPO" ] && [ -z "$UPSTREAM_PUSH_TOKEN" ]; then
-            echo "::error::UPSTREAM_REPO is set but the UPSTREAM_PUSH_TOKEN secret is not"; missing=1
-          fi
           exit $missing
 
       - name: Cache runtime
-        if: steps.version.outputs.version != ''
         uses: actions/cache@v4
         with:
           path: .runtime/lib
           key: runtime-${{ runner.os }}-${{ hashFiles('scripts/build-runtime.sh', 'Sources/CLlama/include/**') }}
 
       - name: Build runtime
-        if: steps.version.outputs.version != ''
         run: ./scripts/build-runtime.sh
 
       - name: Test
-        if: steps.version.outputs.version != ''
         run: ./scripts/test.sh
 
       - name: Import signing certificate
-        if: steps.version.outputs.version != ''
         env:
           P12: ${{ secrets.IMLA_SIGNING_P12_BASE64 }}
           P12_PASSWORD: ${{ secrets.IMLA_SIGNING_P12_PASSWORD }}
@@ -89,7 +77,6 @@ jobs:
           security find-identity -p codesigning "$KEYCHAIN" | grep -q '"Imla Release"'
 
       - name: Build app
-        if: steps.version.outputs.version != ''
         env:
           IMLA_SIGN_IDENTITY: Imla Release
           IMLA_VERSION: ${{ steps.version.outputs.version }}
@@ -98,7 +85,6 @@ jobs:
         run: ./scripts/build-app.sh
 
       - name: Package and sign update
-        if: steps.version.outputs.version != ''
         env:
           SPARKLE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
           VERSION: ${{ steps.version.outputs.version }}
@@ -130,29 +116,13 @@ jobs:
           EOF
           cat dist/appcast.xml
 
-      # When this repository is a push mirror of another (the UPSTREAM_REPO variable, an
-      # HTTPS clone URL), the mirror deletes refs that exist only here, so the tag goes
-      # upstream first and comes back with the next sync.
-      - name: Tag
-        if: steps.version.outputs.version != ''
-        env:
-          UPSTREAM_REPO: ${{ vars.UPSTREAM_REPO }}
-          UPSTREAM_PUSH_TOKEN: ${{ secrets.UPSTREAM_PUSH_TOKEN }}
-          VERSION: ${{ steps.version.outputs.version }}
-        run: |
-          git tag "v$VERSION" "$GITHUB_SHA"
-          if [ -n "$UPSTREAM_REPO" ]; then
-            git push "https://oauth2:${UPSTREAM_PUSH_TOKEN}@${UPSTREAM_REPO#https://}" "v$VERSION"
-          fi
-
       - name: Publish release
-        if: steps.version.outputs.version != ''
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           gh release create "v$VERSION" dist/Imla.zip dist/appcast.xml \
-            --target "$GITHUB_SHA" --title "Imla $VERSION" --notes-file "$RUNNER_TEMP/notes.md"
+            --verify-tag --title "Imla $VERSION" --notes-file "$RUNNER_TEMP/notes.md"
 
       - name: Remove signing keychain
         if: always()

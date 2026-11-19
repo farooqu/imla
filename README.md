@@ -97,7 +97,9 @@ uv run --with pillow scripts/make-icon.py   # rebuilds Resources/AppIcon.icns fr
 
 ## Releases
 
-Every push to `main` with new commits since the last `v*` tag publishes a release through `.github/workflows/release.yml`. `scripts/next-release.py` picks the version from [Conventional Commits](https://www.conventionalcommits.org) since that tag: `feat:` bumps the minor version, `fix:` and anything else the patch, and `feat!:` or a `BREAKING CHANGE:` footer the major (the minor while the version is 0.x). It also writes the release notes from the commit subjects. The workflow builds and signs the app, uploads `Imla.zip` and a signed Sparkle `appcast.xml`, and Imla's updater reads the appcast from the latest release.
+To release, run `./scripts/release.sh` on an up-to-date `main`. It picks the version from the [Conventional Commits](https://www.conventionalcommits.org) since the last `v*` tag: `feat:` bumps the minor version, `fix:` and anything else the patch, and `feat!:` or a `BREAKING CHANGE:` footer the major (the minor while the version is 0.x). It shows the version and the release notes it wrote from the commit subjects, and after you confirm, tags `main` with the notes as the tag message and pushes both.
+
+The tag starts `.github/workflows/release.yml`, which builds and signs the app and publishes a GitHub release with `Imla.zip` and a signed Sparkle `appcast.xml`. Imla's updater reads the appcast from the latest release. Ordinary pushes don't release anything.
 
 Releases are signed twice, without an Apple Developer account:
 
@@ -111,6 +113,3 @@ Releases are signed twice, without an Apple Developer account:
 | `IMLA_SIGNING_P12_BASE64` | The certificate and its private key, as a base64 PKCS#12 |
 | `IMLA_SIGNING_P12_PASSWORD` | The PKCS#12 password |
 | `SPARKLE_ED_PRIVATE_KEY` | The Sparkle private key, base64 |
-| `UPSTREAM_PUSH_TOKEN` | Only if this repository is a push mirror: a token that can push tags to the repository it mirrors |
-
-If the GitHub repository is a push mirror of another, set the repository variable `UPSTREAM_REPO` to that repository's HTTPS clone URL. A mirror deletes refs that exist only on GitHub, so the workflow pushes each release tag there first.
