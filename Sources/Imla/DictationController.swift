@@ -15,6 +15,8 @@ struct HistoryItem: Identifiable, Codable {
     var transcribed: TimeInterval?
     var cleanup: TimeInterval?
     var ready: TimeInterval?
+    /// How S1-mini styled it, such as "Semi-formal, email". Missing for other cleanup.
+    var style: String?
 }
 
 @MainActor
@@ -299,10 +301,15 @@ final class DictationController: ObservableObject {
 
             var text = TextRules.apply(raw, vocabulary: config.vocabulary)
             var cleanup: TimeInterval?
+            var style: String?
             if config.llmCleanup {
                 phase = .polishing
                 let cleanupStart = Date()
-                text = await polish(text) ?? text
+                let email = S1MiniEngine.emailApps.contains(targetApp?.bundleIdentifier ?? "")
+                if let polished = await polish(text, email: email) {
+                    text = polished
+                    if config.cleanupEngine == .builtIn { style = config.cleanupStyle.title + (email ? ", email" : "") }
+                }
                 cleanup = Date().timeIntervalSince(cleanupStart)
             }
             try Task.checkCancellation()
@@ -310,7 +317,7 @@ final class DictationController: ObservableObject {
 
             // Record it before pasting, so nothing is lost if the paste goes wrong.
             var item = HistoryItem(raw: raw, final: text, app: targetApp?.localizedName, seconds: seconds,
-                                   transcribed: transcribed, cleanup: cleanup)
+                                   transcribed: transcribed, cleanup: cleanup, style: style)
             remember(item)
             let notice: String?
             if let target, !(await target.restore()) {
@@ -333,13 +340,13 @@ final class DictationController: ObservableObject {
     }
 
     /// Returns nil to keep the rule-cleaned text, such as when the model isn't available.
-    private func polish(_ text: String) async -> String? {
+    private func polish(_ text: String, email: Bool) async -> String? {
         var output = ""
         do {
             switch config.cleanupEngine {
             case .builtIn:
                 // S1-mini has its own trained prompt; the vocabulary reaches it through recognition and the rules.
-                guard let cleaner, let cleaned = try await cleaner.clean(text) else { return nil }
+                guard let cleaner, let cleaned = try await cleaner.clean(text, style: config.cleanupStyle, email: email) else { return nil }
                 output = cleaned
             case .ollama:
                 guard let ollama else { return nil }

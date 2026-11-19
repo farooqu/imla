@@ -59,9 +59,15 @@ public enum S1MiniModel {
 /// Runs S1-mini in process through llama.cpp, on the same ggml and Metal
 /// runtime as Nemotron. Every native call runs on one serial queue.
 public final class S1MiniEngine: @unchecked Sendable {
-    /// Sentence case and punctuation without making the wording formal. The
-    /// "casual" register lowercases everything.
-    static let control = "[Styling: semi-formal] [Structure: prose] [Context: general]"
+    /// Mail apps get the trained email layout: a greeting line, the body, and a
+    /// sign-off block, when you said them.
+    public static let emailApps: Set<String> = ["com.apple.mail", "com.microsoft.Outlook"]
+
+    /// The control line the model was trained on. Structure stays prose: a list
+    /// in a chat message or code comment would be a surprise.
+    public static func control(style: CleanupStyle, email: Bool) -> String {
+        "[Styling: \(style.rawValue)] [Structure: prose] [Context: \(email ? "email" : "general")]"
+    }
     static let system = "You are a text normalizer for speech-to-text transcripts. The input begins with a control line "
         + "specifying the styling, structure, and context settings; clean the transcript to match those settings "
         + "and output only the cleaned text."
@@ -73,7 +79,7 @@ public final class S1MiniEngine: @unchecked Sendable {
     private let vocab: OpaquePointer
 
     /// The trained input format, including the empty think block the model saw in training.
-    public static func prompt(for text: String) -> String {
+    public static func prompt(for text: String, control: String) -> String {
         "<|im_start|>system\n\(system)<|im_end|>\n<|im_start|>user\n\(control)\n\(text)<|im_end|>\n"
             + "<|im_start|>assistant\n<think>\n\n</think>\n\n"
     }
@@ -115,13 +121,16 @@ public final class S1MiniEngine: @unchecked Sendable {
     /// Returns the cleaned text, or nil if the model couldn't clean it. A dictation
     /// too long for one pass is cleaned a few sentences at a time, as the model
     /// card recommends; a backtrack that spans two passes stays as spoken.
-    public func clean(_ text: String) async throws -> String? {
-        try await withCheckedThrowingContinuation { continuation in
+    public func clean(_ text: String, style: CleanupStyle, email: Bool) async throws -> String? {
+        let control = Self.control(style: style, email: email)
+        return try await withCheckedThrowingContinuation { continuation in
             queue.async { [self] in
                 continuation.resume(with: Result {
-                    if fits(text) { return try generate(text) }
+                    let fits = { self.fits($0, control: control) }
+                    if fits(text) { return try generate(text, control: control) }
                     // A part the model can't clean stays rule-cleaned rather than losing the rest.
-                    return try Self.chunks(of: text, fitting: fits).map { try generate($0) ?? $0 }.joined(separator: " ")
+                    return try Self.chunks(of: text, fitting: fits).map { try generate($0, control: control) ?? $0 }
+                        .joined(separator: " ")
                 })
             }
         }
@@ -152,16 +161,16 @@ public final class S1MiniEngine: @unchecked Sendable {
     }
 
     /// Whether the prompt and the longest output it allows fit in the context.
-    private func fits(_ text: String) -> Bool {
-        let prompt = tokenize(Self.prompt(for: text)).count
+    private func fits(_ text: String, control: String) -> Bool {
+        let prompt = tokenize(Self.prompt(for: text, control: control)).count
         return prompt + Self.outputLimit(prompt) <= Int(llama_n_ctx(context))
     }
 
     /// Output tracks input length; the model card suggests 1.3x + 32 as a ceiling.
     private static func outputLimit(_ promptTokens: Int) -> Int { promptTokens * 13 / 10 + 32 }
 
-    private func generate(_ text: String) throws -> String? {
-        var tokens = tokenize(Self.prompt(for: text))
+    private func generate(_ text: String, control: String) throws -> String? {
+        var tokens = tokenize(Self.prompt(for: text, control: control))
         let limit = Self.outputLimit(tokens.count)
         // A cut-off cleanup would drop words, so text that doesn't fit stays rule-cleaned.
         guard tokens.count + limit <= Int(llama_n_ctx(context)) else { return nil }

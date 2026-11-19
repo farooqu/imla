@@ -41,11 +41,14 @@ import Testing
 
 @Test func s1MiniPromptIsTheTrainedFormat() {
     // The model card says any other wording, or a missing empty think block, garbles its output.
-    #expect(S1MiniEngine.prompt(for: "ship it friday") == """
+    // Trained values only: "semi-casual" is hyphenated, and email is a context, not a style.
+    #expect(S1MiniEngine.control(style: .semiFormal, email: false) == "[Styling: semi-formal] [Structure: prose] [Context: general]")
+    let control = S1MiniEngine.control(style: .semiCasual, email: true)
+    #expect(S1MiniEngine.prompt(for: "ship it friday", control: control) == """
         <|im_start|>system
         You are a text normalizer for speech-to-text transcripts. The input begins with a control line specifying the styling, structure, and context settings; clean the transcript to match those settings and output only the cleaned text.<|im_end|>
         <|im_start|>user
-        [Styling: semi-formal] [Structure: prose] [Context: general]
+        [Styling: semi-casual] [Structure: prose] [Context: email]
         ship it friday<|im_end|>
         <|im_start|>assistant
         <think>

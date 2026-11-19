@@ -106,7 +106,11 @@ private struct GeneralTab: View {
                                     downloadBytes: S1MiniModel.downloadBytes, install: controller.installCleanupModel)
                     }
                     .disabled(!controller.config.llmCleanup)
-                    Text("Runs on this Mac. The model is kept in the Hugging Face cache, so other apps using it share one copy.")
+                    Picker("Style", selection: $controller.config.cleanupStyle) {
+                        ForEach(CleanupStyle.allCases, id: \.self) { Text($0.title).tag($0) }
+                    }
+                    .disabled(!controller.config.llmCleanup)
+                    Text("\(controller.config.cleanupStyle.detail) Runs on this Mac. The model is kept in the Hugging Face cache, so other apps using it share one copy.")
                         .font(.caption).foregroundStyle(.secondary)
                 case .ollama:
                     TextField("Ollama URL", text: $controller.config.ollamaURL)
@@ -330,6 +334,7 @@ private struct HistoryTab: View {
                         HStack {
                             Text(item.date, style: .time).font(.caption).foregroundStyle(.secondary)
                             if let app = item.app { Text("→ \(app)").font(.caption).foregroundStyle(.secondary) }
+                            if let style = item.style { Text(style).font(.caption).foregroundStyle(.secondary) }
                             Spacer()
                             Button("Copy") { controller.copy(item.final) }.buttonStyle(.borderless)
                         }

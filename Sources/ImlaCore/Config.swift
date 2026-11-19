@@ -46,12 +46,41 @@ public enum CleanupEngine: String, Codable, CaseIterable {
     case ollama
 }
 
+/// S1-mini's trained registers, from least to most formal.
+public enum CleanupStyle: String, Codable, CaseIterable {
+    case casual
+    case semiCasual = "semi-casual"
+    case semiFormal = "semi-formal"
+    case formal
+
+    public var title: String {
+        switch self {
+        case .casual: "Casual"
+        case .semiCasual: "Semi-casual"
+        case .semiFormal: "Semi-formal"
+        case .formal: "Formal"
+        }
+    }
+
+    /// What the style does, with the model card's example.
+    public var detail: String {
+        switch self {
+        case .casual: "All lowercase, no apostrophes, and light punctuation: “im gonna be late. i cant walk past him”."
+        case .semiCasual: "Keeps a relaxed tone with light capitalization: “hmm, I'm gonna be late. there's a cute dog outside”."
+        case .semiFormal: "Sentence case and full punctuation, keeping contractions: “I'm going to be late. There's a cute dog outside.”"
+        case .formal: "Sentence case and full punctuation, with contractions spelled out: “I am going to be late. There is a cute dog outside.”"
+        }
+    }
+}
+
 public struct ImlaConfig: Codable, Equatable {
     public var ollamaURL = "http://localhost:11434"
     /// Empty until you choose one of your Ollama models.
     public var ollamaModel = ""
     public var llmCleanup = true
     public var cleanupEngine = CleanupEngine.builtIn
+    /// The register S1-mini writes in.
+    public var cleanupStyle = CleanupStyle.semiFormal
     public var hotkey = Hotkey.default
     public var playSounds = true
     /// Show the words as they're recognized in the pill, instead of the waveform.
@@ -68,6 +97,7 @@ public struct ImlaConfig: Codable, Equatable {
         ollamaModel = try c.decodeIfPresent(String.self, forKey: .ollamaModel) ?? d.ollamaModel
         llmCleanup = try c.decodeIfPresent(Bool.self, forKey: .llmCleanup) ?? d.llmCleanup
         cleanupEngine = (try? c.decodeIfPresent(CleanupEngine.self, forKey: .cleanupEngine)) ?? d.cleanupEngine
+        cleanupStyle = (try? c.decodeIfPresent(CleanupStyle.self, forKey: .cleanupStyle)) ?? d.cleanupStyle
         hotkey = try c.decodeIfPresent(Hotkey.self, forKey: .hotkey) ?? d.hotkey
         playSounds = try c.decodeIfPresent(Bool.self, forKey: .playSounds) ?? d.playSounds
         liveTranscript = try c.decodeIfPresent(Bool.self, forKey: .liveTranscript) ?? d.liveTranscript
