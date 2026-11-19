@@ -1,35 +1,64 @@
-# Imla
+<p align="center">
+  <img src="docs/icon.png" width="128" height="128" alt="Imla icon: a reed pen writing past a sound wave">
+</p>
 
-*Imlāʾ* (إملاء) is Arabic for dictation.
+<h1 align="center">Imla</h1>
 
-Imla is a menu bar dictation app for macOS. Press a hotkey, talk, and the text lands in whatever field has focus: Slack, a browser, an editor. Everything runs on your Mac, on the GPU: speech recognition is NVIDIA's Nemotron Speech Streaming English 0.6B through NeMo-Speech.cpp, and cleanup is "S1-mini" by "Superwhisper" through llama.cpp. Cleanup can also use a model in [Ollama](https://ollama.com).
+<p align="center">
+  <b>Private, on-device dictation for macOS.</b><br>
+  Press a hotkey, talk, and clean text lands wherever you're typing.
+</p>
+
+<p align="center">
+  <a href="https://github.com/farooqu/imla/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/farooqu/imla?label=release&color=2f7d4f"></a>
+  <img alt="macOS 26 or later" src="https://img.shields.io/badge/macOS-26%2B-555">
+  <img alt="Apple silicon" src="https://img.shields.io/badge/Apple%20silicon-required-555">
+</p>
+
+*Imlāʾ* (إملاء) is Arabic for dictation: a scholar speaks, and the scribe writes down every word.
+
+Imla lives in the menu bar. Speech recognition and cleanup both run on your Mac's GPU, so nothing you say leaves the machine.
+
+- **Fast:** words are recognized while you speak, so the text is ready about 30 ms after you stop.
+- **Clean:** fillers, stutters, and self-corrections ("Friday, actually make that Thursday") are cleaned up before the text is pasted, and "new paragraph" starts one.
+- **Your words:** a vocabulary of names and jargon steers recognition toward them and fixes the usual misspellings.
+- **Safe to switch away:** the text goes to the field you started in, even if focus moved while you talked. Anything Imla couldn't paste stays in Recent Dictations.
+- **Self-contained:** speech is NVIDIA's Nemotron Speech Streaming English 0.6B, and cleanup is "S1-mini" by "Superwhisper". A model in [Ollama](https://ollama.com) can do the cleanup instead.
 
 ## Install
 
-Requires a Mac with Apple silicon and macOS 26 or later.
-
-1. Download `Imla.zip` from the [latest release](https://github.com/farooqu/imla/releases/latest), unzip it, and move `Imla.app` to Applications.
-2. Open it. macOS blocks it the first time, because Imla isn't notarized by Apple. Open **System Settings → Privacy & Security**, click **Open Anyway** next to the message about Imla, and confirm. You only do this once; updates install without asking.
+1. Download `Imla.dmg` from the [latest release](https://github.com/farooqu/imla/releases/latest), open it, and drag Imla onto the Applications folder next to it.
+2. Open it. The first time, macOS refuses: it says Apple could not verify that Imla is free of malware, and offers to move it to the Trash. That's expected; see [First launch](#first-launch) below. You only do this once; updates install without asking.
 3. Grant **Microphone** and **Accessibility** when asked. Accessibility is what lets Imla paste into other apps; without it, dictations go to the clipboard instead.
 4. Open **Settings** from the menu bar icon and download the speech and cleanup models (about 1.2 GB together).
 
-Imla checks for updates daily and installs them in the background. **Check for Updates…** in the menu bar menu checks now.
+Imla checks for updates daily and installs them in the background; **Check for Updates…** in the menu checks now.
 
-Macs managed by an organization may not allow apps that aren't notarized.
+### First launch
+
+Apple checks apps from outside the App Store for malware ("notarization") only when their developer pays for an Apple Developer account. Imla isn't notarized, so the first time you open it, macOS shows a warning that Apple could not verify Imla is free of malware, with **Done** and **Move to Trash** buttons. Imla is signed, but by its own certificate rather than one from Apple. To open it anyway:
+
+1. Click **Done**, not Move to Trash.
+2. Open **System Settings → Privacy & Security** and scroll down to **Security**. There's a message that Imla was blocked; click **Open Anyway** next to it and enter your password.
+3. Open Imla again and click **Open Anyway** once more in the dialog that appears.
+
+macOS remembers this, and updates don't ask again: Sparkle installs them without the quarantine flag that a browser download gets. If you'd rather use Terminal, `xattr -dr com.apple.quarantine /Applications/Imla.app` does the same before the first launch.
 
 ## Use
 
-- **⌃⌥Space** (change it in Settings): tap to start, tap again to finish. Or hold it while you talk and let go.
-- **Esc** cancels without typing anything.
-- Dictation starts only in a text field. Apps that don't report what has focus, such as Chrome, are allowed.
-- A small pill under the caret shows what's happening by colour: gray bars follow your voice while listening, blue while transcribing, purple while cleaning up, green when done. Words appear only for errors.
-- The menu bar icon has Settings, the LLM toggle, and **Recent Dictations** (click one to copy it).
+| Key | What it does |
+|---|---|
+| **⌃⌥Space** | Tap to start and tap again to finish, or hold it while you talk. Change it in Settings. |
+| **Esc** | Cancel without typing anything. |
+| **Menu bar icon** | Settings, the LLM toggle, and **Recent Dictations** (click one to copy it). |
+
+Dictation starts only in a text field; apps that don't report what has focus, such as Chrome, are allowed. A small pill under the caret shows what's happening by colour: gray bars follow your voice while you speak, blue while transcribing, purple while cleaning up, green when done. Turn on **Show live transcript** in Settings to see the words scroll by instead of the bars while you speak. Apart from that, words appear in the pill only for errors.
 
 ## Resource usage
 
 Measured on an M4 Max with both built-in models loaded:
 
-| | |
+| | Measured |
 |---|---|
 | Download | App 6 MB; speech model 700 MB; cleanup model 484 MB |
 | Memory | About 950 MB resident, of which about 400 MB is Imla's own; the rest is the memory-mapped model files, which macOS can page out and which other apps using the same files share |
@@ -37,7 +66,7 @@ Measured on an M4 Max with both built-in models loaded:
 
 Turning off **Polish with LLM**, or using Ollama for cleanup, unloads S1-mini.
 
-## How a dictation flows
+## How it works
 
 1. Microphone audio is converted to 16 kHz mono and decoded by Nemotron as you speak, so recognition is nearly done when you stop.
 2. Every vocabulary term biases Nemotron's decoder toward it (RNNT phrase boosting).
@@ -47,7 +76,7 @@ Turning off **Polish with LLM**, or using Ollama for cleanup, unloads S1-mini.
 
 The last 20 dictations are kept in `~/Library/Application Support/Imla/history.json`.
 
-## Speech model
+### Speech model
 
 The model lives in NeMo-Speech.cpp's shared cache, not inside Imla:
 
@@ -57,7 +86,7 @@ The model lives in NeMo-Speech.cpp's shared cache, not inside Imla:
 
 `$NEMO_SPEECH_MODEL_DIR` moves it. NVIDIA's published GGUF lacks the tokenizer that phrase boosting needs, so Imla adds the original tokenizer to it; that's the `.spm.gguf`. The weights are memory-mapped, so another process using the same file shares one copy of them. Settings downloads the published model and tokenizer from Hugging Face and builds the file; the result is checked against a pinned SHA-256.
 
-## Cleanup model
+### Cleanup model
 
 The built-in cleanup model is "S1-mini" by "Superwhisper" (0.6B, Q4_K_M), a Qwen3-0.6B fine-tune trained only to clean up dictation. It lives in the Hugging Face hub cache, where llama.cpp and the Hugging Face tools also look:
 
@@ -97,9 +126,9 @@ uv run --with pillow scripts/make-icon.py   # rebuilds Resources/AppIcon.icns fr
 
 ## Releases
 
-To release, run `./scripts/release.sh` on an up-to-date `main`. It picks the version from the [Conventional Commits](https://www.conventionalcommits.org) since the last `v*` tag: `feat:` bumps the minor version, `fix:` and anything else the patch, and `feat!:` or a `BREAKING CHANGE:` footer the major (the minor while the version is 0.x). It shows the version and the release notes it wrote from the commit subjects, and after you confirm, tags `main` with the notes as the tag message and pushes both.
+To release, run `./scripts/release.sh` on an up-to-date `main`. It picks the version from the [Conventional Commits](https://www.conventionalcommits.org) since the last `v*` tag: `feat:` bumps the minor version, `fix:` and anything else the patch, and `feat!:` or a `BREAKING CHANGE:` footer the major (the minor while the version is 0.x). Only commits that change what ships in the app count (`Sources`, `Resources`, the package manifest, and the build scripts), so documentation and other housekeeping never cut a release on their own. It shows the version and the release notes it wrote from the commit subjects, and after you confirm, tags `main` with the notes as the tag message and pushes both.
 
-The tag starts `.github/workflows/release.yml`, which builds and signs the app and publishes a GitHub release with `Imla.zip` and a signed Sparkle `appcast.xml`. Imla's updater reads the appcast from the latest release. Ordinary pushes don't release anything.
+The tag starts `.github/workflows/release.yml`, which builds and signs the app and publishes a GitHub release with `Imla.dmg` for new installs, and `Imla.zip` with a signed Sparkle `appcast.xml` for updates. Imla's updater reads the appcast from the latest release. Ordinary pushes don't release anything.
 
 Releases are signed twice, without an Apple Developer account:
 
