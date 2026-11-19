@@ -8,7 +8,13 @@ struct HistoryItem: Identifiable, Codable {
     let raw: String
     let final: String
     let app: String?
+    /// How long you spoke.
     let seconds: TimeInterval
+    /// After you stopped: until the final transcript, how long cleanup took, and until the
+    /// text was pasted. Missing in dictations from older versions, and cleanup when it's off.
+    var transcribed: TimeInterval?
+    var cleanup: TimeInterval?
+    var ready: TimeInterval?
 }
 
 @MainActor
@@ -233,8 +239,9 @@ final class DictationController: ObservableObject {
         if config.playSounds { NSSound(named: "Pop")?.play() }
         self.stream = nil
         phase = .transcribing
-        let seconds = Date().timeIntervalSince(startedAt)
-        work = Task { await self.complete(stream, seconds: seconds) }
+        let stoppedAt = Date()
+        let seconds = stoppedAt.timeIntervalSince(startedAt)
+        work = Task { await self.complete(stream, seconds: seconds, stoppedAt: stoppedAt) }
     }
 
     func cancel() {
@@ -247,22 +254,28 @@ final class DictationController: ObservableObject {
         phase = .idle
     }
 
-    private func complete(_ stream: NemotronStream, seconds: TimeInterval) async {
+    private func complete(_ stream: NemotronStream, seconds: TimeInterval, stoppedAt: Date) async {
         do {
             let raw = try await stream.finish().trimmingCharacters(in: .whitespacesAndNewlines)
+            let transcribed = Date().timeIntervalSince(stoppedAt)
             try Task.checkCancellation()
             guard !raw.isEmpty else { return finishQuietly() }
 
             var text = TextRules.apply(raw, vocabulary: config.vocabulary)
+            var cleanup: TimeInterval?
             if config.llmCleanup {
                 phase = .polishing
+                let cleanupStart = Date()
                 text = await polish(text) ?? text
+                cleanup = Date().timeIntervalSince(cleanupStart)
             }
             try Task.checkCancellation()
             HotkeyCenter.shared.unregister(Self.cancelHotkey)
 
             // Record it before pasting, so nothing is lost if the paste goes wrong.
-            remember(HistoryItem(raw: raw, final: text, app: targetApp?.localizedName, seconds: seconds))
+            var item = HistoryItem(raw: raw, final: text, app: targetApp?.localizedName, seconds: seconds,
+                                   transcribed: transcribed, cleanup: cleanup)
+            remember(item)
             let notice: String?
             if let target, !(await target.restore()) {
                 Paster.copy(text)
@@ -272,6 +285,8 @@ final class DictationController: ObservableObject {
             } else {
                 notice = "Copied. Allow Accessibility to paste automatically"
             }
+            item.ready = Date().timeIntervalSince(stoppedAt)
+            updateHistory(item)
             phase = .done(notice: notice)
             scheduleHide(after: notice == nil ? 0.7 : 4)
         } catch is CancellationError {
@@ -349,6 +364,17 @@ final class DictationController: ObservableObject {
     private func remember(_ item: HistoryItem) {
         history.insert(item, at: 0)
         if history.count > Self.historyLimit { history.removeLast(history.count - Self.historyLimit) }
+        saveHistory()
+    }
+
+    /// Replaces an entry `remember` added, such as with its timing once it's pasted.
+    private func updateHistory(_ item: HistoryItem) {
+        guard let index = history.firstIndex(where: { $0.id == item.id }) else { return }
+        history[index] = item
+        saveHistory()
+    }
+
+    private func saveHistory() {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         try? FileManager.default.createDirectory(at: Self.historyURL.deletingLastPathComponent(), withIntermediateDirectories: true)

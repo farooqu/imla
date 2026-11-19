@@ -231,29 +231,76 @@ private struct VocabularyTab: View {
     }
 }
 
+private struct Stat: View {
+    let value: String
+    let label: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(value).font(.title2.weight(.semibold)).monospacedDigit()
+            Text(label).font(.caption).foregroundStyle(.secondary)
+        }
+    }
+}
+
+/// Milliseconds under a second, then seconds, then minutes.
+func duration(_ seconds: TimeInterval) -> String {
+    if seconds < 1 { return "\(Int((seconds * 1000).rounded())) ms" }
+    if seconds < 60 { return String(format: seconds < 10 ? "%.1f s" : "%.0f s", seconds) }
+    return "\(Int(seconds) / 60) min \(Int(seconds) % 60) s"
+}
+
 private struct HistoryTab: View {
     @ObservedObject var controller: DictationController
+
+    /// The typical wait for text after you stop talking, which is what makes dictation feel instant.
+    private func summary(_ waits: [TimeInterval]) -> some View {
+        let audio = controller.history.reduce(0) { $0 + $1.seconds }
+        return HStack(spacing: 24) {
+            Stat(value: duration(waits[waits.count / 2]), label: "typical wait for text")
+            Stat(value: duration(waits[waits.count - 1]), label: "longest wait")
+            Stat(value: duration(audio), label: "dictated in \(controller.history.count) dictations")
+        }
+        .padding(.vertical, 4)
+    }
+
+    /// "12 s audio · text in 92 ms: transcript 31 ms, cleanup 48 ms"
+    private func timing(_ item: HistoryItem) -> String {
+        var line = "\(duration(item.seconds)) audio"
+        if let ready = item.ready {
+            line += " · text in \(duration(ready))"
+            var parts: [String] = []
+            if let transcribed = item.transcribed { parts.append("transcript \(duration(transcribed))") }
+            if let cleanup = item.cleanup { parts.append("cleanup \(duration(cleanup))") }
+            if !parts.isEmpty { line += ": " + parts.joined(separator: ", ") }
+        }
+        return line
+    }
 
     var body: some View {
         if controller.history.isEmpty {
             ContentUnavailableView("No dictations yet", systemImage: "waveform",
                                    description: Text("Press \(controller.config.hotkey.displayString) in any app to start."))
         } else {
-            List(controller.history) { item in
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack {
-                        Text(item.date, style: .time).font(.caption).foregroundStyle(.secondary)
-                        if let app = item.app { Text("→ \(app)").font(.caption).foregroundStyle(.secondary) }
-                        Text(String(format: "%.0fs", item.seconds)).font(.caption).foregroundStyle(.tertiary)
-                        Spacer()
-                        Button("Copy") { controller.copy(item.final) }.buttonStyle(.borderless)
+            let waits = controller.history.compactMap(\.ready).sorted()
+            List {
+                if !waits.isEmpty { Section { summary(waits) } }
+                ForEach(controller.history) { item in
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack {
+                            Text(item.date, style: .time).font(.caption).foregroundStyle(.secondary)
+                            if let app = item.app { Text("→ \(app)").font(.caption).foregroundStyle(.secondary) }
+                            Spacer()
+                            Button("Copy") { controller.copy(item.final) }.buttonStyle(.borderless)
+                        }
+                        Text(item.final).textSelection(.enabled)
+                        if item.raw != item.final {
+                            Text("Heard: " + item.raw).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+                        }
+                        Text(timing(item)).font(.caption).foregroundStyle(.secondary).monospacedDigit()
                     }
-                    Text(item.final).textSelection(.enabled)
-                    if item.raw != item.final {
-                        Text("Heard: " + item.raw).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
-                    }
+                    .padding(.vertical, 4)
                 }
-                .padding(.vertical, 4)
             }
         }
     }
