@@ -1,8 +1,7 @@
 #!/bin/bash
 # Builds the pinned NeMo-Speech.cpp ASR C library (Metal) into .runtime/lib,
 # plus libllama from the same llama.cpp tree for the cleanup model, so both
-# share one ggml. The pins match the voice stack's prepare_nemotron.py, so
-# Imla runs the same tested runtime. Rerunning is a no-op once built.
+# share one ggml. Rerunning is a no-op once built.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -14,7 +13,9 @@ LIB="$ROOT/lib"
 # Install names the C library links against, plus its own.
 LIBS=(libnemo_speech_asr_c.2.dylib libnemo_speech_asr.dylib libllama.0.dylib libggml.0.dylib libggml-base.0.dylib
       libggml-blas.0.dylib libggml-cpu.0.dylib libggml-metal.0.dylib)
-MARKER="$LIB/.built-$SOURCE_COMMIT-llama"
+# Matches LSMinimumSystemVersion in Resources/Info.plist.
+export MACOSX_DEPLOYMENT_TARGET=26.0
+MARKER="$LIB/.built-$SOURCE_COMMIT-llama-macos$MACOSX_DEPLOYMENT_TARGET"
 
 if [ -f "$MARKER" ]; then
     echo "Runtime already built at $LIB"
@@ -22,7 +23,7 @@ if [ -f "$MARKER" ]; then
 fi
 
 export DEVELOPER_DIR="${DEVELOPER_DIR:-/Library/Developer/CommandLineTools}"
-# The sentencepiece build script requires Ninja; take the same pinned wheel the voice stack uses.
+# The sentencepiece build script requires Ninja; take a pinned wheel.
 NINJA_BIN="$(dirname "$(uv run --quiet --no-project --with ninja==1.13.2 python -c 'import shutil; print(shutil.which("ninja"))')")"
 export PATH="$NINJA_BIN:$PATH"
 
@@ -36,7 +37,7 @@ git -C "$SRC" submodule update --init --depth 1 llama.cpp
 [ "$(git -C "$SRC/llama.cpp" rev-parse HEAD)" = "$LLAMA_COMMIT" ] || { echo "Unexpected llama.cpp revision" >&2; exit 1; }
 
 (cd "$SRC" && bash scripts/build_sentencepiece_static.sh)
-cmake -S "$SRC" -B "$ROOT/build" -G Ninja -DCMAKE_BUILD_TYPE=Release \
+cmake -S "$SRC" -B "$ROOT/build" -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_DEPLOYMENT_TARGET="$MACOSX_DEPLOYMENT_TARGET" \
     -DGGML_METAL=ON -DGGML_METAL_EMBED_LIBRARY=ON \
     -DNEMO_SPEECH_BUILD_TTS=OFF -DNEMO_SPEECH_BUILD_DIAR=OFF -DNEMO_SPEECH_BUILD_HTTP=OFF \
     -DNEMO_SPEECH_BUILD_CLI=OFF -DNEMO_SPEECH_BUILD_MIC_CAPTURE=OFF -DNEMO_SPEECH_BUILD_TESTS=OFF \

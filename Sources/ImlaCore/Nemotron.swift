@@ -9,9 +9,9 @@ public struct NemotronError: LocalizedError {
 /// In-process streaming Nemotron on Metal, through the NeMo-Speech.cpp C ABI.
 ///
 /// Every native call runs on one serial queue: the recognizer and its streams
-/// belong to a single thread, as in the voice stack's server.
+/// belong to a single thread.
 public final class NemotronEngine: @unchecked Sendable {
-    /// Matches the voice stack's tested decoder contexts boost.
+    /// Strength of the decoder's phrase boosting for vocabulary terms.
     public static let boost: Float = 1.5
 
     let queue = DispatchQueue(label: "imla.nemotron")
@@ -22,7 +22,7 @@ public final class NemotronEngine: @unchecked Sendable {
     public init(model: URL) throws {
         try queue.sync {
             var backend = nemo_speech_asr_backend_config(size: MemoryLayout<nemo_speech_asr_backend_config>.size, gpu: 0)
-            // The voice stack's benchmarked cache-aware streaming geometry.
+            // Cache-aware streaming geometry: 160 ms chunks.
             var streaming = nemo_speech_asr_streaming_config(
                 size: MemoryLayout<nemo_speech_asr_streaming_config>.size,
                 chunk_size: 0.16, ctc_left_padding: 1.92, ctc_right_padding: 1.92, rnnt_right_context: 6)

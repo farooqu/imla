@@ -7,7 +7,10 @@ let runtime = URL(fileURLWithPath: #filePath).deletingLastPathComponent().append
 
 let package = Package(
     name: "Imla",
-    platforms: [.macOS(.v14)],
+    platforms: [.macOS("26.0")],
+    dependencies: [
+        .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.10.1"),
+    ],
     targets: [
         .target(name: "CNemoSpeech"),
         .target(name: "CLlama"),
@@ -21,7 +24,7 @@ let package = Package(
                               "-Xlinker", "-rpath", "-Xlinker", runtime]),
             ]
         ),
-        .executableTarget(name: "Imla", dependencies: ["ImlaCore"]),
+        .executableTarget(name: "Imla", dependencies: ["ImlaCore", .product(name: "Sparkle", package: "Sparkle")]),
         .testTarget(name: "ImlaCoreTests", dependencies: ["ImlaCore"]),
     ]
 )

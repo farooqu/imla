@@ -2,7 +2,7 @@ import CryptoKit
 import Foundation
 
 /// The English Nemotron streaming model, in NeMo-Speech.cpp's shared model cache
-/// so every app on the Mac (the voice stack included) maps the same file.
+/// so every app on the Mac that uses it maps the same file.
 ///
 /// NVIDIA's published GGUF lacks the SentencePiece tokenizer that hotword
 /// boosting needs, so the shared copy is the published file with the original

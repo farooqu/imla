@@ -1,0 +1,151 @@
+# Every push to main that has new commits since the last v* tag becomes a release:
+# scripts/next-release.py picks the semver bump and notes from Conventional Commits,
+# then this builds, signs, and publishes Imla.zip and the Sparkle appcast.xml.
+name: Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - uses: astral-sh/setup-uv@v6
+
+      - name: Next version
+        id: version
+        run: |
+          VERSION="$(python3 scripts/next-release.py "$RUNNER_TEMP/notes.md")"
+          if [ -z "$VERSION" ]; then
+            echo "Nothing new since the last release."
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "build=$(git rev-list --count HEAD)" >> "$GITHUB_OUTPUT"
+          echo "DEVELOPER_DIR=$(xcode-select -p)" >> "$GITHUB_ENV"
+          echo "KEYCHAIN=$RUNNER_TEMP/imla-signing.keychain-db" >> "$GITHUB_ENV"
+
+      - name: Check secrets
+        if: steps.version.outputs.version != ''
+        env:
+          P12: ${{ secrets.IMLA_SIGNING_P12_BASE64 }}
+          P12_PASSWORD: ${{ secrets.IMLA_SIGNING_P12_PASSWORD }}
+          SPARKLE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
+          FORGEJO_TOKEN: ${{ secrets.FORGEJO_TOKEN }}
+        run: |
+          missing=0
+          for name in P12 P12_PASSWORD SPARKLE_KEY FORGEJO_TOKEN; do
+            [ -n "${!name}" ] || { echo "::error::Secret for $name is not set"; missing=1; }
+          done
+          exit $missing
+
+      - name: Cache runtime
+        if: steps.version.outputs.version != ''
+        uses: actions/cache@v4
+        with:
+          path: .runtime/lib
+          key: runtime-${{ runner.os }}-${{ hashFiles('scripts/build-runtime.sh', 'Sources/CLlama/include/**') }}
+
+      - name: Build runtime
+        if: steps.version.outputs.version != ''
+        run: ./scripts/build-runtime.sh
+
+      - name: Test
+        if: steps.version.outputs.version != ''
+        run: ./scripts/test.sh
+
+      - name: Import signing certificate
+        if: steps.version.outputs.version != ''
+        env:
+          P12: ${{ secrets.IMLA_SIGNING_P12_BASE64 }}
+          P12_PASSWORD: ${{ secrets.IMLA_SIGNING_P12_PASSWORD }}
+        run: |
+          KEYCHAIN_PASSWORD="$(openssl rand -hex 16)"
+          echo "$P12" | base64 --decode > "$RUNNER_TEMP/imla.p12"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 3600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security import "$RUNNER_TEMP/imla.p12" -k "$KEYCHAIN" -P "$P12_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" > /dev/null
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+          rm "$RUNNER_TEMP/imla.p12"
+          security find-identity -p codesigning "$KEYCHAIN" | grep -q '"Imla Release"'
+
+      - name: Build app
+        if: steps.version.outputs.version != ''
+        env:
+          IMLA_SIGN_IDENTITY: Imla Release
+          IMLA_VERSION: ${{ steps.version.outputs.version }}
+          IMLA_BUILD: ${{ steps.version.outputs.build }}
+          IMLA_INSTALL_DIR: none
+        run: ./scripts/build-app.sh
+
+      - name: Package and sign update
+        if: steps.version.outputs.version != ''
+        env:
+          SPARKLE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
+          VERSION: ${{ steps.version.outputs.version }}
+          BUILD: ${{ steps.version.outputs.build }}
+        run: |
+          mkdir -p dist
+          ditto -c -k --keepParent build/Imla.app dist/Imla.zip
+          KEY_FILE="$RUNNER_TEMP/sparkle.key"
+          printf '%s' "$SPARKLE_KEY" > "$KEY_FILE"
+          SIGNATURE="$(.build/artifacts/sparkle/Sparkle/bin/sign_update --ed-key-file "$KEY_FILE" dist/Imla.zip)"
+          rm "$KEY_FILE"
+          BASE="https://github.com/${GITHUB_REPOSITORY}/releases"
+          cat > dist/appcast.xml <<EOF
+          <?xml version="1.0" encoding="utf-8"?>
+          <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
+            <channel>
+              <title>Imla</title>
+              <item>
+                <title>Imla $VERSION</title>
+                <pubDate>$(date -u '+%a, %d %b %Y %H:%M:%S +0000')</pubDate>
+                <sparkle:version>$BUILD</sparkle:version>
+                <sparkle:shortVersionString>$VERSION</sparkle:shortVersionString>
+                <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+                <sparkle:releaseNotesLink>$BASE/tag/v$VERSION</sparkle:releaseNotesLink>
+                <enclosure url="$BASE/download/v$VERSION/Imla.zip" type="application/octet-stream" $SIGNATURE/>
+              </item>
+            </channel>
+          </rss>
+          EOF
+          cat dist/appcast.xml
+
+      # The GitHub repository mirrors a Forgejo repository, and the mirror deletes refs
+      # that only exist on GitHub, so the tag goes to Forgejo first.
+      - name: Tag
+        if: steps.version.outputs.version != ''
+        env:
+          FORGEJO_TOKEN: ${{ secrets.FORGEJO_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          git tag "v$VERSION" "$GITHUB_SHA"
+          git push "https://oauth2:${FORGEJO_TOKEN}@code.thefarooqs.net/umer/imla.git" "v$VERSION"
+
+      - name: Publish release
+        if: steps.version.outputs.version != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          gh release create "v$VERSION" dist/Imla.zip dist/appcast.xml \
+            --target "$GITHUB_SHA" --title "Imla $VERSION" --notes-file "$RUNNER_TEMP/notes.md"
+
+      - name: Remove signing keychain
+        if: always()
+        run: security delete-keychain "$KEYCHAIN" 2>/dev/null || true

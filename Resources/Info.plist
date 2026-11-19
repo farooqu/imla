@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleIdentifier</key>
-	<string>com.ufarooq.imla</string>
+	<string>io.github.farooqu.imla</string>
 	<key>CFBundleName</key>
 	<string>Imla</string>
 	<key>CFBundleDisplayName</key>
@@ -13,17 +13,24 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.1</string>
+	<string>0.0.0-dev</string>
 	<key>CFBundleVersion</key>
-	<string>1</string>
+	<string>0</string>
 	<key>CFBundleIconFile</key>
 	<string>AppIcon</string>
 	<key>LSMinimumSystemVersion</key>
-	<string>14.0</string>
+	<string>26.0</string>
 	<key>LSUIElement</key>
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Imla transcribes your voice on this Mac while you dictate.</string>
+	<!-- scripts/build-app.sh adds SUFeedURL for release builds only. -->
+	<key>SUPublicEDKey</key>
+	<string>unkRZicEuW3vWBNyVb0V4QoRZ6zktz8JFYz6yF6Cyuw=</string>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
+	<key>SUAutomaticallyUpdate</key>
+	<true/>
 	<key>NSHighResolutionCapable</key>
 	<true/>
 </dict>

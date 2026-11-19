@@ -53,7 +53,7 @@ public struct ImlaConfig: Codable, Equatable {
     public var cleanupEngine = CleanupEngine.builtIn
     public var hotkey = Hotkey.default
     public var playSounds = true
-    public var vocabulary: [VocabularyEntry] = ImlaConfig.starterVocabulary
+    public var vocabulary: [VocabularyEntry] = []
 
     public init() {}
 
@@ -79,11 +79,6 @@ public struct ImlaConfig: Codable, Equatable {
         return vocabulary.map { $0.term.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty && seen.insert($0.lowercased()).inserted }
     }
-
-    public static let starterVocabulary: [VocabularyEntry] = [
-        "Umer", "Farooq", "Indeed", "Kubernetes", "GitLab", "Jira", "MR", "Slack",
-        "Nemotron", "Ollama", "Gemma", "Amp",
-    ].map { VocabularyEntry(term: $0) }
 
     public static var fileURL: URL {
         FileManager.default.homeDirectoryForCurrentUser

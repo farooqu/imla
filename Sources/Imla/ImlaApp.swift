@@ -1,4 +1,5 @@
 import AppKit
+import Sparkle
 import SwiftUI
 
 @main
@@ -7,7 +8,7 @@ struct ImlaApp: App {
 
     var body: some Scene {
         MenuBarExtra {
-            MenuContent(controller: delegate.controller)
+            MenuContent(controller: delegate.controller, updater: delegate.updater)
         } label: {
             MenuIcon(controller: delegate.controller)
         }
@@ -21,6 +22,9 @@ struct ImlaApp: App {
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let controller = DictationController()
+    /// Release builds carry an update feed; local builds don't, so they never replace themselves.
+    let updater: SPUStandardUpdaterController? = Bundle.main.object(forInfoDictionaryKey: "SUFeedURL") == nil ? nil
+        : SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil)
     private var overlay: OverlayWindow?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -41,6 +45,7 @@ private struct MenuIcon: View {
 
 private struct MenuContent: View {
     @ObservedObject var controller: DictationController
+    let updater: SPUStandardUpdaterController?
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
@@ -62,6 +67,9 @@ private struct MenuContent: View {
         Divider()
         Button("Settings…") { openSettings(tab: 0) }
         .keyboardShortcut(",")
+        if let updater {
+            Button("Check for Updates…") { updater.checkForUpdates(nil) }
+        }
         Button("Quit Imla") { NSApp.terminate(nil) }.keyboardShortcut("q")
     }
 

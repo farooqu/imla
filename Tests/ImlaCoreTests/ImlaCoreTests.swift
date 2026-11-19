@@ -10,8 +10,8 @@ import Testing
 }
 
 @Test func rulesDropFillersAndStutterButKeepRealWords() {
-    let out = TextRules.apply("um, so I I think the the umbrella is, uh, in Umer's car hmm", vocabulary: [])
-    #expect(out == "So I think the umbrella is, in Umer's car")
+    let out = TextRules.apply("um, so I I think the the umbrella is, uh, in Sam's car hmm", vocabulary: [])
+    #expect(out == "So I think the umbrella is, in Sam's car")
 }
 
 @Test func acceptRejectsAnswersAndUnwrapsQuotes() {
