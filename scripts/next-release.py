@@ -6,7 +6,9 @@ first argument. Commits follow Conventional Commits (https://www.conventionalcom
   feat: ...                         -> minor
   fix: ..., or any other commit     -> patch
   feat!: ..., or "BREAKING CHANGE:" -> major (minor while the version is 0.x)
-The first release is 0.1.0. Prints nothing when there's nothing new to release.
+Only commits that change what ships in the app count, so a release isn't cut for
+documentation, CI, or other housekeeping alone. The first release is 0.1.0. Prints
+nothing when there's nothing new to release.
 """
 import re
 import subprocess
@@ -15,6 +17,9 @@ import sys
 TYPE = re.compile(r"^(?P<type>[a-z]+)(?:\([^)]*\))?(?P<bang>!)?:\s*(?P<text>.+)$")
 SECTIONS = [("breaking", "Breaking changes"), ("feat", "Features"), ("fix", "Fixes"), ("other", "Other changes")]
 HIDDEN = {"chore", "ci", "build", "style", "test"}  # Kept out of the notes unless breaking.
+# What goes into Imla.app.
+SHIPPED = ["Sources", "Resources", "Package.swift", "Package.resolved",
+           "scripts/build-app.sh", "scripts/build-runtime.sh"]
 
 
 def git(*args):
@@ -29,7 +34,7 @@ def last_tag():
 def main():
     notes_path = sys.argv[1]
     tag = last_tag()
-    log = git("log", "--reverse", "--format=%h%x1f%s%x1f%b%x1e", f"{tag}..HEAD" if tag else "HEAD")
+    log = git("log", "--reverse", "--format=%h%x1f%s%x1f%b%x1e", f"{tag}..HEAD" if tag else "HEAD", "--", *SHIPPED)
     commits = [c.strip("\n").split("\x1f") for c in log.split("\x1e") if c.strip()]
     if not commits:
         return
