@@ -5,13 +5,26 @@ import ImlaCore
 
 /// Global hotkeys through Carbon, which needs no Accessibility permission and
 /// reports both press and release (for hold-to-talk).
+///
+/// Carbon hotkeys fire on the Mac the keyboard is attached to, even while
+/// Universal Control is sending the keyboard to another Mac, and swallow the
+/// keys so that Mac never sees them. Universal Control becomes the frontmost
+/// app while it has the pointer, so the hotkeys are released for that time:
+/// the keys then go through to the other Mac, where its own Imla picks them up.
 final class HotkeyCenter {
     static let shared = HotkeyCenter()
 
     private var refs: [UInt32: EventHotKeyRef] = [:]
+    private var hotkeys: [UInt32: Hotkey] = [:]
     private var actions: [UInt32: (pressed: () -> Void, released: () -> Void)] = [:]
+    private var suspended = false
 
     private init() {
+        NotificationCenter.default.addObserver(forName: NSWorkspace.didActivateApplicationNotification,
+                                               object: NSWorkspace.shared, queue: .main) { note in
+            let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+            HotkeyCenter.shared.setSuspended(app?.bundleIdentifier == "com.apple.universalcontrol")
+        }
         var specs = [EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed)),
                      EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyReleased))]
         InstallEventHandler(GetApplicationEventTarget(), { _, event, _ in
@@ -30,18 +43,36 @@ final class HotkeyCenter {
     @discardableResult
     func register(_ id: UInt32, _ hotkey: Hotkey, pressed: @escaping () -> Void, released: @escaping () -> Void = {}) -> Bool {
         unregister(id)
-        var ref: EventHotKeyRef?
-        let status = RegisterEventHotKey(hotkey.keyCode, hotkey.modifiers, EventHotKeyID(signature: OSType(0x53435242), id: id),
-                                         GetApplicationEventTarget(), 0, &ref)
-        guard status == noErr, let ref else { return false }
-        refs[id] = ref
+        guard suspended || install(id, hotkey) else { return false }
+        hotkeys[id] = hotkey
         actions[id] = (pressed, released)
         return true
     }
 
     func unregister(_ id: UInt32) {
         if let ref = refs.removeValue(forKey: id) { UnregisterEventHotKey(ref) }
+        hotkeys[id] = nil
         actions[id] = nil
+    }
+
+    private func install(_ id: UInt32, _ hotkey: Hotkey) -> Bool {
+        var ref: EventHotKeyRef?
+        let status = RegisterEventHotKey(hotkey.keyCode, hotkey.modifiers, EventHotKeyID(signature: OSType(0x53435242), id: id),
+                                         GetApplicationEventTarget(), 0, &ref)
+        guard status == noErr, let ref else { return false }
+        refs[id] = ref
+        return true
+    }
+
+    private func setSuspended(_ suspend: Bool) {
+        guard suspend != suspended else { return }
+        suspended = suspend
+        if suspend {
+            refs.values.forEach { UnregisterEventHotKey($0) }
+            refs.removeAll()
+        } else {
+            for (id, hotkey) in hotkeys { _ = install(id, hotkey) }
+        }
     }
 }
 
