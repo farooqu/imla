@@ -33,7 +33,7 @@
    - **Device Control and Data Access** (called **Accessibility** on macOS 26), in System Settings → Privacy & Security. It lets Imla find the field your cursor is in and paste there. macOS describes everything this permission could allow; Imla uses it only to paste.
    - **Models**: download the speech and cleanup models (about 1.2 GB together).
 
-Imla checks for updates daily and installs them in the background; **Check for Updates…** in the menu checks now.
+Imla checks for updates daily, downloads them in the background, and restarts into the new version as soon as you're not dictating; **Check for Updates…** in the menu checks now.
 
 ### First launch
 

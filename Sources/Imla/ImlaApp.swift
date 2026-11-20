@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import ImlaCore
 import Sparkle
 import SwiftUI
@@ -28,12 +29,31 @@ struct ImlaApp: App {
 }
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
     let controller = DictationController()
     /// Release builds carry an update feed; local builds don't, so they never replace themselves.
-    let updater: SPUStandardUpdaterController? = Bundle.main.object(forInfoDictionaryKey: "SUFeedURL") == nil ? nil
-        : SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil)
+    private(set) var updater: SPUStandardUpdaterController?
     private var overlay: OverlayWindow?
+    private var pendingInstall: AnyCancellable?
+
+    override init() {
+        super.init()
+        if Bundle.main.object(forInfoDictionaryKey: "SUFeedURL") != nil {
+            updater = SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: self, userDriverDelegate: nil)
+        }
+    }
+
+    /// Sparkle installs an update it downloaded in the background when the app quits, and
+    /// a menu bar app rarely quits. Until then, Check for Updates offers that download again
+    /// instead of looking for a newer release. So install it as soon as Imla is idle.
+    nonisolated func updater(_ updater: SPUUpdater, willInstallUpdateOnQuit item: SUAppcastItem,
+                             immediateInstallationBlock install: @escaping () -> Void) -> Bool {
+        MainActor.assumeIsolated {
+            // Idle comes after a dictation's paste and clipboard restore.
+            pendingInstall = controller.$phase.first { $0 == .idle }.sink { _ in install() }
+        }
+        return true
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         overlay = OverlayWindow(controller: controller)
