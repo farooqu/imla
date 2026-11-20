@@ -29,7 +29,8 @@ jobs:
         id: version
         run: |
           # Fetched again: checking out a tag can leave it lightweight, without its message.
-          git fetch --force origin "refs/tags/$GITHUB_REF_NAME:refs/tags/$GITHUB_REF_NAME"
+          # Every tag's message goes into the update window's notes.
+          git fetch --force --tags origin
           git for-each-ref --format='%(contents)' "refs/tags/$GITHUB_REF_NAME" > "$RUNNER_TEMP/notes.md"
           echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
           echo "build=$(git rev-list --count HEAD)" >> "$GITHUB_OUTPUT"
@@ -109,8 +110,9 @@ jobs:
           SIGNATURE="$(.build/artifacts/sparkle/Sparkle/bin/sign_update --ed-key-file "$KEY_FILE" dist/Imla.zip)"
           rm "$KEY_FILE"
           BASE="https://github.com/${GITHUB_REPOSITORY}/releases"
-          # Shown in Sparkle's update window, instead of loading the GitHub release page.
-          NOTES_HTML="$(python3 scripts/notes-html.py "$RUNNER_TEMP/notes.md")"
+          # Shown in Sparkle's update window, instead of loading the GitHub release page:
+          # the notes of every release newer than the one installed.
+          NOTES_HTML="$(python3 scripts/notes-html.py)"
           cat > dist/appcast.xml <<EOF
           <?xml version="1.0" encoding="utf-8"?>
           <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
